@@ -35,7 +35,7 @@ function Index() {
             Visão Geral
           </h1>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Telemetria consolidada (Wagoo + 2AVENDAS) via API protegida no servidor.
+            Telemetria consolidada Wagoo + 2AVendas via API agregadora no servidor.
           </p>
         </div>
       </div>
@@ -67,7 +67,7 @@ function Index() {
 
       <section className="space-y-6">
         <header className="flex items-baseline justify-between">
-          <h2 className="font-mono text-sm uppercase tracking-[0.3em] text-foreground">2AVENDAS</h2>
+          <h2 className="font-mono text-sm tracking-[0.2em] text-foreground">2AVendas</h2>
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
             volume por dia (API)
           </span>

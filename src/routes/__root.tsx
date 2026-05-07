@@ -12,7 +12,7 @@ import appCss from "../styles.css?url";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
-import { fetchTwoAvendasDashboard } from "@/lib/two-avendas.dashboard.functions";
+import { fetchKorvenDashboard } from "@/lib/dashboard-api";
 import { dashboardPaths, parseRootSearch } from "@/lib/root-search";
 import type { DashboardViewModel } from "@/lib/dashboard-view";
 
@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
     const { organization_id, period_days, chart_days } = deps.search;
 
-    const dashboard = await fetchTwoAvendasDashboard({
+    const dashboard = await fetchKorvenDashboard({
       data: {
         organization_id,
         period_days,
@@ -98,7 +98,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Korven Lab // Console" },
-      { name: "description", content: "Painel administrativo industrial da Korven Lab — métricas, status e eventos dos sub-apps Wagoo e 2AVENDAS." },
+      {
+        name: "description",
+        content:
+          "Painel administrativo Korven Lab — métricas e eventos Wagoo (wag-backend) e 2AVendas (2A-back).",
+      },
       { name: "author", content: "Korven Lab" },
       { property: "og:title", content: "Korven Lab // Console" },
       { property: "og:description", content: "Painel administrativo industrial da Korven Lab." },

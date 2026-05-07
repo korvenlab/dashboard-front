@@ -37,7 +37,7 @@ const ORGS = [
   },
   {
     value: "00000000-0000-4000-8000-000000000003",
-    label: "2AVENDAS (UUID demo)",
+    label: "2AVendas (UUID demo)",
   },
 ];
 

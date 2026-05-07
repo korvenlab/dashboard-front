@@ -6,7 +6,7 @@ import { EventsTable } from "@/components/events-table";
 const rootRouteApi = getRouteApi("__root__");
 
 export const Route = createFileRoute("/avendas")({
-  head: () => ({ meta: [{ title: "2AVENDAS // Korven Lab" }] }),
+  head: () => ({ meta: [{ title: "2AVendas // Korven Lab" }] }),
   component: AvendasPage,
 });
 
@@ -30,7 +30,7 @@ function AvendasPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">2AVENDAS</h1>
+        <h1 className="font-mono text-xl font-semibold tracking-[0.15em]">2AVendas</h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
           Volume de vendas — série `dois_avendas.volume_por_dia` da API /dashboard.
         </p>

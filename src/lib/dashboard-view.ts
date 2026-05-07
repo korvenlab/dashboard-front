@@ -120,7 +120,7 @@ function parseKpis(raw: unknown): Kpi[] | undefined {
   const pairs: { key: string; label: string }[] = [
     { key: "receita_total", label: "Receita Total" },
     { key: "assinaturas_ativas_wagoo", label: "Assinaturas Ativas (Wagoo)" },
-    { key: "volume_vendas_2avendas", label: "Volume de Vendas (2AVENDAS)" },
+    { key: "volume_vendas_2avendas", label: "Volume de Vendas (2AVendas)" },
     { key: "uptime_medio", label: "Uptime Médio" },
   ];
 
@@ -169,8 +169,13 @@ function parseEvents(raw: unknown): AppEvent[] | undefined {
       (typeof o.fonte === "string" && o.fonte) ||
       "core";
     const appNorm = appRaw.toLowerCase();
+    /** Slug interno sempre `wagoo` = produto Wagoo (wag-backend). Campo `waggo` no JSON veio da API 2AVendas. */
     const app: AppEvent["app"] =
-      appNorm.includes("wagoo") ? "wagoo" : appNorm.includes("2avendas") || appNorm.includes("avendas") ? "2avendas" : "core";
+      appNorm.includes("waggo") || appNorm.includes("wagoo")
+        ? "wagoo"
+        : appNorm.includes("2avendas") || appNorm.includes("avendas")
+          ? "2avendas"
+          : "core";
     out.push({ id, app, status, message, timestamp: ts });
   }
   return out.length ? out : undefined;
@@ -252,7 +257,9 @@ export function mapDashboardApiPayload(
 
   const kpis = parseKpis(root.kpis) ?? parseKpis(root.KPIs);
 
-  const wagoo = record(root.wagoo) ?? record(root.Wagoo);
+  /** Wagoo (wag-backend) usa `wagoo`. 2AVendas (2A-back) às vezes expõe o mesmo bloco como `waggo` — mesmo produto Wagoo, chave diferente. */
+  const wagoo =
+    record(root.wagoo) ?? record(root.Wagoo) ?? record(root.waggo) ?? record(root.Waggo);
   const dois = record(root.dois_avendas) ?? record(root.doisAvendas) ?? record(root["2avendas"]);
 
   const wagooReceitaPorDia = seriesReceita(wagoo?.receita_por_dia ?? wagoo?.serie_receita);
@@ -328,7 +335,7 @@ function mergeUiConfigs(w: DashboardUiConfig | undefined, a: DashboardUiConfig |
   };
 }
 
-/** Une respostas das APIs Wagoo e 2AVENDAS (cada uma pode ser `null` se falhou ou veio vazia). */
+/** Une visões vindas de Wagoo (wag-backend) e 2AVendas (2A-back); cada uma pode ser `null` se falhou ou veio vazia. */
 export function mergeDualDashboardViewModels(
   wagoo: DashboardViewModel | null,
   avendas: DashboardViewModel | null,
@@ -362,7 +369,11 @@ export function mergeDualDashboardViewModels(
   const kpisFinal = mergedKpis.length ? mergedKpis : fb.kpis;
 
   const wagooReceitaPorDia =
-    wagoo && wagoo.wagooReceitaPorDia.length > 0 ? wagoo.wagooReceitaPorDia : fb.wagooReceitaPorDia;
+    wagoo && wagoo.wagooReceitaPorDia.length > 0
+      ? wagoo.wagooReceitaPorDia
+      : avendas && avendas.wagooReceitaPorDia.length > 0
+        ? avendas.wagooReceitaPorDia
+        : fb.wagooReceitaPorDia;
 
   const avendasVolumePorDia =
     avendas && avendas.avendasVolumePorDia.length > 0

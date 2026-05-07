@@ -9,7 +9,11 @@ export const rootSearchSchema = z.object({
     z.string().optional(),
   ),
   period_days: z.coerce.number().min(1).max(366).catch(30),
-  chart_days: z.coerce.number().min(1).max(366).catch(14),
+  chart_days: z.preprocess((v) => {
+    const n = typeof v === "string" || typeof v === "number" ? Number(v) : NaN;
+    if (!Number.isFinite(n)) return 14;
+    return Math.min(90, Math.max(1, Math.round(n)));
+  }, z.number()),
 });
 
 export type RootSearch = z.infer<typeof rootSearchSchema>;

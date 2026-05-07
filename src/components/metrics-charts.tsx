@@ -59,7 +59,7 @@ export function VolumeBarChart({ data, chartDays }: { data: ChartPointVolume[]; 
       <div className="mb-4 flex items-baseline justify-between">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-            Volume / 2AVENDAS
+            Volume / 2AVendas
           </div>
           <div className="mt-1 font-mono text-lg text-foreground">Transações por dia</div>
         </div>

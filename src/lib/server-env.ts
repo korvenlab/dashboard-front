@@ -1,9 +1,13 @@
-/** Ambiente exclusivo do servidor (Workers / Node). Nunca exponha estes valores ao cliente. */
+/**
+ * Ambiente exclusivo do servidor (SSR / Node / Workers). Nunca exponha isto ao browser.
+ * `WAGOO_*` → API Wagoo (wag-backend). `TWO_AVENDAS_*` → API 2AVendas (2A-back). Prefixos só histórico.
+ */
 export type MetricsApiEnv = {
   apiBaseUrl: string | undefined;
   metricsApiKey: string | undefined;
 };
 
+/** Credenciais da API 2AVendas (`TWO_AVENDAS_*`). */
 export type TwoAvendasServerEnv = MetricsApiEnv;
 export type WagooServerEnv = MetricsApiEnv;
 export type DashboardBackendEnv = MetricsApiEnv;

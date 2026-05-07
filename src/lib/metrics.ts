@@ -25,7 +25,7 @@ const MOCK: MetricsResponse = {
   kpis: [
     { label: "Receita Total", value: "R$ 482.910", delta: "+12.4%", trend: "up" },
     { label: "Assinaturas Ativas (Wagoo)", value: "3.142", delta: "+4.8%", trend: "up" },
-    { label: "Volume de Vendas (2AVENDAS)", value: "18.764", delta: "-2.1%", trend: "down" },
+    { label: "Volume de Vendas (2AVendas)", value: "18.764", delta: "-2.1%", trend: "down" },
     { label: "Uptime Médio", value: "99.92%", delta: "+0.03%", trend: "up" },
   ],
   series: Array.from({ length: 14 }).map((_, i) => {
@@ -49,7 +49,7 @@ const MOCK: MetricsResponse = {
   ],
 };
 
-/** @deprecated Os dados vêm do servidor via `fetchTwoAvendasDashboard` (Wagoo + 2AVENDAS agregados) — não exponha chaves no browser. */
+/** @deprecated Dados via servidor (`fetchKorvenDashboard`): Wagoo (wag-backend) + 2AVendas (2A-back); não exponha chaves no browser. */
 export async function fetchMetrics(_signal?: AbortSignal): Promise<MetricsResponse> {
   return MOCK;
 }

@@ -24,7 +24,7 @@ import type { UiSidebarItem } from "@/lib/dashboard-view";
 const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard },
   { title: "Wagoo", url: "/wagoo", icon: Boxes },
-  { title: "2AVENDAS", url: "/avendas", icon: ShoppingCart },
+  { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 
