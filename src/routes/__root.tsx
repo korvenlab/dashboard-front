@@ -13,7 +13,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { fetchKorvenDashboard } from "@/lib/dashboard-api";
-import { dashboardPaths, parseRootSearch } from "@/lib/root-search";
+import { parseRootSearch } from "@/lib/root-search";
 import type { DashboardViewModel } from "@/lib/dashboard-view";
 import type { RootLoaderData } from "@/lib/root-loader-data";
 
@@ -77,11 +77,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   validateSearch: (search) => parseRootSearch(search as Record<string, unknown>),
   loaderDeps: ({ search }) => ({ search }),
-  loader: async ({ deps, location }): Promise<RootLoaderData> => {
-    if (!dashboardPaths.has(location.pathname)) {
-      return { dashboard: null };
-    }
-
+  loader: async ({ deps }): Promise<RootLoaderData> => {
     const { organization_id, period_days, chart_days } = deps.search;
 
     const dashboard = (await fetchKorvenDashboard({
@@ -112,8 +108,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "icon", type: "image/png", href: "/korven-logo.png" },
       { rel: "icon", type: "image/svg+xml", href: "/korven-logo.svg" },
-      { rel: "shortcut icon", href: "/korven-logo.svg" },
+      { rel: "shortcut icon", href: "/korven-logo.png" },
       {
         rel: "stylesheet",
         href: appCss,

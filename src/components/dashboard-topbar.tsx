@@ -73,7 +73,7 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
   const remoteSubtitle = topbarUi?.subtitle ?? "";
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 flex-wrap items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur">
+    <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-3 border-b border-border bg-background/90 px-4 py-2 backdrop-blur">
       <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
       <div className="ml-1 hidden h-5 w-px bg-border md:block" />
       <Select

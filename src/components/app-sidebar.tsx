@@ -64,11 +64,14 @@ export function AppSidebar({ dynamicItems }: Props) {
       <SidebarHeader className="border-b border-sidebar-border px-3 py-4">
         <Link to="/" search={search} className="flex items-center gap-2">
           <img
-            src="/korven-logo.svg"
+            src="/korven-logo.png"
             alt="Korven"
             className="h-8 w-8 object-contain"
             loading="eager"
             decoding="async"
+            onError={(e) => {
+              e.currentTarget.src = "/korven-logo.svg";
+            }}
           />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="font-mono text-sm font-semibold tracking-widest text-foreground">
