@@ -1,9 +1,8 @@
-import { createFileRoute, getRouteApi } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { KpiCard } from "@/components/kpi-card";
 import { RevenueAreaChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
-
-const rootRouteApi = getRouteApi("__root__");
+import { useRootLoaderData } from "@/hooks/use-root-loader-data";
 
 export const Route = createFileRoute("/wagoo")({
   head: () => ({ meta: [{ title: "Wagoo // Korven Lab" }] }),
@@ -11,7 +10,7 @@ export const Route = createFileRoute("/wagoo")({
 });
 
 function WagooPage() {
-  const { dashboard } = rootRouteApi.useLoaderData();
+  const { dashboard } = useRootLoaderData();
 
   if (!dashboard) {
     return (

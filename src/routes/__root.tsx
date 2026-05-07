@@ -15,6 +15,7 @@ import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { fetchKorvenDashboard } from "@/lib/dashboard-api";
 import { dashboardPaths, parseRootSearch } from "@/lib/root-search";
 import type { DashboardViewModel } from "@/lib/dashboard-view";
+import type { RootLoaderData } from "@/lib/root-loader-data";
 
 function NotFoundComponent() {
   return (
@@ -76,14 +77,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   validateSearch: (search) => parseRootSearch(search as Record<string, unknown>),
   loaderDeps: ({ search }) => ({ search }),
-  loader: async ({ deps, location }) => {
+  loader: async ({ deps, location }): Promise<RootLoaderData> => {
     if (!dashboardPaths.has(location.pathname)) {
-      return { dashboard: null as DashboardViewModel | null };
+      return { dashboard: null };
     }
 
     const { organization_id, period_days, chart_days } = deps.search;
 
-    const dashboard = await fetchKorvenDashboard({
+    const dashboard: DashboardViewModel = await fetchKorvenDashboard({
       data: {
         organization_id,
         period_days,
