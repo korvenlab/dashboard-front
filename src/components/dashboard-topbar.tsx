@@ -80,7 +80,7 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
         value={orgSelectValue}
         onValueChange={(v) => {
           router.navigate({
-            to: path as "/" | "/wagoo" | "/avendas",
+            to: path as "/" | "/wagoo" | "/avendas" | "/admin",
             search: (prev): RootSearch => ({
               ...(prev as RootSearch),
               organization_id: v === "__all__" ? undefined : v,
@@ -118,7 +118,7 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
               key={p.days}
               onClick={() =>
                 router.navigate({
-                  to: path as "/" | "/wagoo" | "/avendas",
+                  to: path as "/" | "/wagoo" | "/avendas" | "/admin",
                   search: (prev): RootSearch => ({
                     ...(prev as RootSearch),
                     period_days: p.days,

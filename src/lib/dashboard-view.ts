@@ -1,4 +1,4 @@
-import { mockMetrics, type AppEvent, type Kpi } from "@/lib/metrics";
+import type { AppEvent, Kpi } from "@/lib/metrics";
 
 export type DashboardSource = "api" | "fallback";
 
@@ -228,26 +228,16 @@ export function buildFallbackDashboardViewModel(
   filtros: DashboardMeta["filtros"],
   message?: string,
 ): DashboardViewModel {
-  const kpis = mockMetrics.kpis;
-  const wagooReceitaPorDia: ChartPointReceita[] = mockMetrics.series.map((s) => ({
-    t: s.t,
-    receita: s.receita,
-  }));
-  const avendasVolumePorDia: ChartPointVolume[] = mockMetrics.series.map((s) => ({
-    t: s.t,
-    volume: s.vendas,
-  }));
-
   return {
     meta: {
       source: "fallback",
       message,
       filtros,
     },
-    kpis,
-    wagooReceitaPorDia,
-    avendasVolumePorDia,
-    events: mockMetrics.events,
+    kpis: [],
+    wagooReceitaPorDia: [],
+    avendasVolumePorDia: [],
+    events: [],
     ui: {},
   };
 }

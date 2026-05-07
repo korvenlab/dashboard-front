@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AvendasRouteImport } from './routes/avendas'
 import { Route as WagooRouteImport } from './routes/wagoo'
 import { Route as IndexRouteImport } from './routes/index'
 
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AvendasRoute = AvendasRouteImport.update({
   id: '/avendas',
   path: '/avendas',
@@ -30,30 +36,34 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
   '/avendas': typeof AvendasRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesByTo {
+  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
   '/avendas': typeof AvendasRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
   '/avendas': typeof AvendasRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/avendas' | '/wagoo'
+  fullPaths: '/admin' | '/' | '/avendas' | '/wagoo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/avendas' | '/wagoo'
-  id: '__root__' | '/' | '/avendas' | '/wagoo'
+  to: '/admin' | '/' | '/avendas' | '/wagoo'
+  id: '__root__' | '/admin' | '/' | '/avendas' | '/wagoo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AdminRoute: typeof AdminRoute
   IndexRoute: typeof IndexRoute
   AvendasRoute: typeof AvendasRoute
   WagooRoute: typeof WagooRoute
@@ -61,6 +71,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/avendas': {
       id: '/avendas'
       path: '/avendas'
@@ -86,6 +103,7 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  AdminRoute: AdminRoute,
   IndexRoute: IndexRoute,
   AvendasRoute: AvendasRoute,
   WagooRoute: WagooRoute,
