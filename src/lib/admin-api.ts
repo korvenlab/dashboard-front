@@ -203,26 +203,27 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
         (Array.isArray(root?.items) && (root?.items as unknown[])) ||
         (Array.isArray(root?.roles) && (root?.roles as unknown[])) ||
         (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
-      const itemsMaybe = itemsRaw
-        .map((it) => {
-          if (typeof it === "string") return { value: it, label: it };
-          const r = asRecord(it);
-          if (!r) return null;
-          const value = asString(r.slug) ?? asString(r.value) ?? asString(r.role);
-          if (!value) return null;
-          const permsRaw = Array.isArray(r.permissions) ? r.permissions : [];
-          const permissions = permsRaw
-            .map((p) => (typeof p === "string" ? p : null))
-            .filter((p): p is string => !!p);
-          return {
-            value,
-            label: asString(r.label) ?? value,
-            description: asString(r.description),
-            permissions,
-          };
-        })
-        .filter((x): x is AdminRoleOption => isAdminRoleOption(x));
-      const items: AdminRoleOption[] = itemsMaybe;
+      const items: AdminRoleOption[] = itemsRaw.reduce<AdminRoleOption[]>((acc, it) => {
+        if (typeof it === "string") {
+          acc.push({ value: it, label: it });
+          return acc;
+        }
+        const r = asRecord(it);
+        if (!r) return acc;
+        const value = asString(r.slug) ?? asString(r.value) ?? asString(r.role);
+        if (!value) return acc;
+        const permsRaw = Array.isArray(r.permissions) ? r.permissions : [];
+        const permissions = permsRaw
+          .map((p) => (typeof p === "string" ? p : null))
+          .filter((p): p is string => !!p);
+        acc.push({
+          value,
+          label: asString(r.label) ?? value,
+          description: asString(r.description),
+          permissions,
+        });
+        return acc;
+      }, []);
       if (items.length > 0) return { items, fromFallback: false };
       fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
     } catch (e) {
