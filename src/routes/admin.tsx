@@ -32,7 +32,9 @@ function AdminPage() {
     setLoading(true);
     setMessage("");
     try {
-      const data = await fetchAdminUsers({ data: { source, search: search.trim() || undefined, page, limit: 20 } });
+      const data = (await fetchAdminUsers({
+        data: { source, search: search.trim() || undefined, page, limit: 20 },
+      })) as { items: AdminUser[]; page: number; limit: number; total: number };
       setPageData(data);
       setAssets(null);
     } catch (e) {
@@ -78,7 +80,9 @@ function AdminPage() {
 
   async function viewAssets(user: AdminUser) {
     try {
-      const items = await fetchAdminUserAssets({ data: { source, id: user.id } });
+      const items = (await fetchAdminUserAssets({
+        data: { source, id: user.id },
+      })) as AdminUserAsset[];
       setAssets(items);
       setMessage(items.length ? "" : "Sem assets para este usuário.");
     } catch (e) {
