@@ -1,5 +1,5 @@
 import { Link, useRouterState, useSearch } from "@tanstack/react-router";
-import { LayoutDashboard, Boxes, ShoppingCart, ShieldUser, Wrench, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Boxes, ShoppingCart, ShieldUser, Wrench, LogOut, type LucideIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -38,18 +38,23 @@ function iconFromHint(hint?: string): LucideIcon {
 }
 
 function mapDynamic(items: UiSidebarItem[]): { title: string; url: string; icon: LucideIcon }[] {
-  return items.map((it) => ({
+  const mapped = items.map((it) => ({
     title: it.label,
     url: it.href.startsWith("/") ? it.href : `/${it.href}`,
     icon: iconFromHint(it.icon),
   }));
+  if (!mapped.some((it) => it.url === "/admin")) {
+    mapped.push({ title: "Admin", url: "/admin", icon: ShieldUser });
+  }
+  return mapped;
 }
 
 type Props = {
   dynamicItems?: UiSidebarItem[];
+  onLogout?: () => void;
 };
 
-export function AppSidebar({ dynamicItems }: Props) {
+export function AppSidebar({ dynamicItems, onLogout }: Props) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const search = useSearch({ from: "__root__" }) as RootSearch;
   const items = dynamicItems?.length ? mapDynamic(dynamicItems) : defaultItems;
@@ -122,6 +127,14 @@ export function AppSidebar({ dynamicItems }: Props) {
           <span className="h-1.5 w-1.5 animate-pulse bg-primary" />
           system online
         </div>
+        <button
+          type="button"
+          onClick={() => onLogout?.()}
+          className="mt-3 flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:bg-accent/40"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          <span className="group-data-[collapsible=icon]:hidden">sair</span>
+        </button>
       </SidebarFooter>
     </Sidebar>
   );

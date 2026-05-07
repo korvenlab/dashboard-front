@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
-  Link,
   createRootRouteWithContext,
   useRouter,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import appCss from "../styles.css?url";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -16,6 +16,10 @@ import { fetchKorvenDashboard } from "@/lib/dashboard-api";
 import { parseRootSearch } from "@/lib/root-search";
 import type { DashboardViewModel } from "@/lib/dashboard-view";
 import type { RootLoaderData } from "@/lib/root-loader-data";
+
+const LOGIN_USER = "admin";
+const LOGIN_PASS = "2002Dhcp?";
+const AUTH_COOKIE = "korven_dashboard_auth";
 
 function NotFoundComponent() {
   return (
@@ -34,6 +38,76 @@ function NotFoundComponent() {
             Go home
           </a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function hasAuthCookie(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((part) => part.trim().startsWith(`${AUTH_COOKIE}=1`));
+}
+
+function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (user === LOGIN_USER && pass === LOGIN_PASS) {
+      if (typeof document !== "undefined") {
+        document.cookie = `${AUTH_COOKIE}=1; Path=/; Max-Age=43200; SameSite=Lax`;
+      }
+      setError("");
+      onSuccess();
+      return;
+    }
+    setError("Credenciais inválidas.");
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md rounded border border-border bg-card/40 p-6 backdrop-blur">
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <img
+            src="/korven-wordmark.png"
+            alt="Korven Lab"
+            className="h-20 w-auto object-contain"
+            onError={(e) => {
+              e.currentTarget.src = "/korven-logo.svg";
+            }}
+          />
+          <h1 className="font-mono text-sm uppercase tracking-[0.35em] text-foreground">Acesso ao Dashboard</h1>
+        </div>
+        <form className="space-y-3" onSubmit={handleSubmit}>
+          <input
+            className="h-10 w-full rounded border border-border bg-background px-3 font-mono text-sm"
+            placeholder="Usuário"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            autoComplete="username"
+          />
+          <input
+            className="h-10 w-full rounded border border-border bg-background px-3 font-mono text-sm"
+            placeholder="Senha"
+            type="password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            autoComplete="current-password"
+          />
+          {error ? (
+            <div className="rounded border border-chart-3/50 bg-chart-3/10 px-2 py-1 font-mono text-xs text-chart-3">
+              {error}
+            </div>
+          ) : null}
+          <button
+            type="submit"
+            className="h-10 w-full rounded border border-primary/50 bg-primary/10 font-mono text-xs uppercase tracking-widest text-primary hover:bg-primary/20"
+          >
+            Entrar
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -146,14 +220,32 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { dashboard } = Route.useLoaderData();
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setAuthenticated(hasAuthCookie());
+  }, []);
+
+  const loginView = useMemo(
+    () => <LoginPanel onSuccess={() => setAuthenticated(true)} />,
+    [],
+  );
+  const handleLogout = () => {
+    if (typeof document !== "undefined") {
+      document.cookie = `${AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+    }
+    setAuthenticated(false);
+  };
 
   const banner = dashboard?.meta.message?.trim() ? dashboard.meta.message : null;
+
+  if (!authenticated) return loginView;
 
   return (
     <QueryClientProvider client={queryClient}>
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background text-foreground">
-          <AppSidebar dynamicItems={dashboard?.ui.sidebar_itens} />
+          <AppSidebar dynamicItems={dashboard?.ui.sidebar_itens} onLogout={handleLogout} />
           <div className="flex min-h-screen flex-1 flex-col">
             <DashboardTopbar
               generatedAt={dashboard?.meta.gerado_em}
