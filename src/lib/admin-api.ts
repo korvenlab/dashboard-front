@@ -21,6 +21,16 @@ export type AdminUsersPage = {
   total: number;
 };
 
+export type AdminRoleOption = {
+  value: string;
+  label: string;
+};
+
+export type AdminRolesResult = {
+  items: AdminRoleOption[];
+  fromFallback: boolean;
+};
+
 export type AdminUserAsset = {
   id: string;
   url: string | null;
@@ -167,6 +177,40 @@ export const fetchAdminUsers = createServerFn({ method: "GET" })
       limit: asNumber(payload.limit, data.limit),
       total: asNumber(payload.total, items.length),
     };
+  }) as any);
+
+export const fetchAdminRoles = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ source: sourceSchema }))
+  .handler((async (ctx: unknown): Promise<AdminRolesResult> => {
+    const { data } = ctx as { data: { source: AdminSource } };
+    try {
+      const raw = await callAdminApi(data.source, "GET", "/api/admin/roles");
+      const root = asRecord(raw);
+      const dataRoot = asRecord(root?.data);
+      const itemsRaw =
+        (Array.isArray(dataRoot?.items) && dataRoot?.items) ||
+        (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
+      const items = itemsRaw
+        .map((it) => {
+          if (typeof it === "string") return { value: it, label: it };
+          const r = asRecord(it);
+          if (!r) return null;
+          const value = asString(r.value) ?? asString(r.role);
+          if (!value) return null;
+          return { value, label: asString(r.label) ?? value };
+        })
+        .filter((x): x is AdminRoleOption => !!x);
+      if (items.length > 0) return { items, fromFallback: false };
+    } catch {
+      // fallback abaixo
+    }
+
+    // fallback: infere roles existentes na listagem de usuários
+    const usersPage = (await fetchAdminUsers({
+      data: { source: data.source, page: 1, limit: 100 },
+    })) as AdminUsersPage;
+    const unique = [...new Set(usersPage.items.map((u) => u.role).filter(Boolean))];
+    return { items: unique.map((r) => ({ value: r, label: r })), fromFallback: true };
   }) as any);
 
 export const fetchAdminUser = createServerFn({ method: "GET" })

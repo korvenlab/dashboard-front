@@ -3,9 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   deleteAdminUser,
   fetchAdminUserAssets,
+  fetchAdminRoles,
   fetchAdminUsers,
   patchAdminUserRole,
   patchAdminUserStatus,
+  type AdminRoleOption,
+  type AdminRolesResult,
   type AdminSource,
   type AdminUser,
   type AdminUserAsset,
@@ -27,6 +30,9 @@ function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string>("");
   const [assets, setAssets] = useState<AdminUserAsset[] | null>(null);
+  const [roles, setRoles] = useState<AdminRoleOption[]>([]);
+  const [rolesFromFallback, setRolesFromFallback] = useState(false);
+  const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
 
   async function load(page = 1) {
     setLoading(true);
@@ -57,9 +63,10 @@ function AdminPage() {
   }
 
   async function makeAdmin(user: AdminUser) {
+    const nextRole = roleDraftByUser[user.id] ?? user.role;
     try {
       await patchAdminUserRole({
-        data: { source, id: user.id, role: "admin" },
+        data: { source, id: user.id, role: nextRole },
       });
       await load(pageData.page);
     } catch (e) {
@@ -95,8 +102,25 @@ function AdminPage() {
 
   useEffect(() => {
     void load(1);
+    void (async () => {
+      try {
+        const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
+        setRoles(result.items);
+        setRolesFromFallback(result.fromFallback);
+      } catch (e) {
+        setRoles([]);
+        setRolesFromFallback(false);
+        setMessage(e instanceof Error ? e.message : String(e));
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const u of pageData.items) next[u.id] = u.role;
+    setRoleDraftByUser(next);
+  }, [pageData.items]);
 
   return (
     <div className="space-y-6 p-6">
@@ -153,6 +177,11 @@ function AdminPage() {
           {message}
         </div>
       ) : null}
+      {rolesFromFallback ? (
+        <div className="rounded border border-chart-4/60 bg-chart-4/10 px-3 py-2 font-mono text-xs text-chart-4">
+          {source}: backend não expôs <code>/api/admin/roles</code>; usando fallback por roles existentes na listagem de usuários.
+        </div>
+      ) : null}
 
       <section className="overflow-x-auto rounded border border-border">
         <table className="w-full min-w-[900px] border-collapse">
@@ -188,11 +217,30 @@ function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs">{u.createdAt ? u.createdAt.slice(0, 10) : "—"}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
+                    <select
+                      className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
+                      value={roleDraftByUser[u.id] ?? u.role}
+                      onChange={(e) =>
+                        setRoleDraftByUser((prev) => ({
+                          ...prev,
+                          [u.id]: e.target.value,
+                        }))
+                      }
+                    >
+                      {(roles.length
+                        ? roles
+                        : [{ value: u.role, label: u.role }]
+                      ).map((r) => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => makeAdmin(u)}
                     >
-                      role=admin
+                      salvar role
                     </button>
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
