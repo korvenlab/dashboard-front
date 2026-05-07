@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Boxes,
   ShoppingCart,
-  Activity,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -38,7 +37,7 @@ function iconFromHint(hint?: string): LucideIcon {
   const h = (hint ?? "").toLowerCase();
   if (h.includes("wagoo") || h.includes("box")) return Boxes;
   if (h.includes("vend") || h.includes("cart") || h.includes("shop")) return ShoppingCart;
-  if (h.includes("setting") || h.includes("config")) return Settings;
+  if (h.includes("setting") || h.includes("config")) return Wrench;
   if (h.includes("dash") || h.includes("home")) return LayoutDashboard;
   return LayoutDashboard;
 }
@@ -64,9 +63,13 @@ export function AppSidebar({ dynamicItems }: Props) {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-3 py-4">
         <Link to="/" search={search} className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center border border-primary/60 bg-background neon-border">
-            <Activity className="h-4 w-4 text-primary" />
-          </div>
+          <img
+            src="/korven-logo.svg"
+            alt="Korven"
+            className="h-8 w-8 object-contain"
+            loading="eager"
+            decoding="async"
+          />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="font-mono text-sm font-semibold tracking-widest text-foreground">
               KORVEN

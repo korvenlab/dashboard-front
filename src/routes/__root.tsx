@@ -27,12 +27,12 @@ function NotFoundComponent() {
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-6">
-          <Link
-            to="/"
+          <a
+            href="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Go home
-          </Link>
+          </a>
         </div>
       </div>
     </div>
@@ -84,13 +84,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
     const { organization_id, period_days, chart_days } = deps.search;
 
-    const dashboard: DashboardViewModel = await fetchKorvenDashboard({
+    const dashboard = (await fetchKorvenDashboard({
       data: {
         organization_id,
         period_days,
         chart_days,
       },
-    });
+    })) as DashboardViewModel;
 
     return { dashboard };
   },
@@ -112,6 +112,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "icon", type: "image/svg+xml", href: "/korven-logo.svg" },
+      { rel: "shortcut icon", href: "/korven-logo.svg" },
       {
         rel: "stylesheet",
         href: appCss,

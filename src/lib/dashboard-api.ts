@@ -41,7 +41,7 @@ type FetchDashboardInputCtx = { data: DashboardQueryInput };
 
 export const fetchKorvenDashboard = createServerFn({ method: "GET" })
   .inputValidator(dashboardQuerySchema)
-  .handler((async (ctx): Promise<DashboardViewModel> => {
+  .handler((async (ctx: unknown): Promise<DashboardViewModel> => {
     const { data } = ctx as FetchDashboardInputCtx;
     setResponseHeaders(
       new Headers({
