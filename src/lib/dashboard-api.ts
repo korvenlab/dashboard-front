@@ -36,9 +36,13 @@ function mergeUpstreamWarnings(view: DashboardViewModel, rawBody: unknown): void
  * Carrega o dashboard unificado (Wagoo via wag-backend + 2AVendas via 2A-back)
  * pelo serviço agregador `GET /dashboard` no Render.
  */
+/** Tipagem entre Zod + `createServerFn` nem sempre infere em todas as versões; mantemos contrato explícito. */
+type FetchDashboardInputCtx = { data: DashboardQueryInput };
+
 export const fetchKorvenDashboard = createServerFn({ method: "GET" })
   .inputValidator(dashboardQuerySchema)
-  .handler(async ({ data }): Promise<DashboardViewModel> => {
+  .handler(async (ctx): Promise<DashboardViewModel> => {
+    const { data } = ctx as FetchDashboardInputCtx;
     setResponseHeaders(
       new Headers({
         "Cache-Control": "private, no-store",

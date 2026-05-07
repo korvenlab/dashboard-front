@@ -14,8 +14,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useRouter, useSearch } from "@tanstack/react-router";
+import { useRouter, useRouterState, useSearch } from "@tanstack/react-router";
 import type { DashboardUiConfig } from "@/lib/dashboard-view";
+import type { RootSearch } from "@/lib/root-search";
 
 const PERIODS = [
   { label: "Últimas 24h", days: 1 },
@@ -47,8 +48,9 @@ type Props = {
 };
 
 export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
-  const search = useSearch({ from: "__root__" });
+  const search = useSearch({ from: "__root__" }) as RootSearch;
   const router = useRouter();
+  const path = useRouterState({ select: (s) => s.location.pathname });
 
   const organization_id = search.organization_id;
   const period_days = search.period_days;
@@ -84,8 +86,9 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
         value={orgSelectValue}
         onValueChange={(v) => {
           router.navigate({
-            search: (prev) => ({
-              ...prev,
+            to: path as "/" | "/wagoo" | "/avendas",
+            search: (prev): RootSearch => ({
+              ...(prev as RootSearch),
               organization_id: v === "__all__" ? undefined : v,
             }),
             replace: true,
@@ -121,8 +124,9 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
               key={p.days}
               onClick={() =>
                 router.navigate({
-                  search: (prev) => ({
-                    ...prev,
+                  to: path as "/" | "/wagoo" | "/avendas",
+                  search: (prev): RootSearch => ({
+                    ...(prev as RootSearch),
                     period_days: p.days,
                   }),
                   replace: true,

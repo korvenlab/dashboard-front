@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useSearch } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Boxes,
@@ -20,6 +20,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import type { UiSidebarItem } from "@/lib/dashboard-view";
+import type { RootSearch } from "@/lib/root-search";
+
+type DashboardHref = "/" | "/wagoo" | "/avendas";
+
+function isDashboardHref(url: string): url is DashboardHref {
+  return url === "/" || url === "/wagoo" || url === "/avendas";
+}
 
 const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard },
@@ -51,12 +58,13 @@ type Props = {
 
 export function AppSidebar({ dynamicItems }: Props) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const search = useSearch({ from: "__root__" }) as RootSearch;
   const items = dynamicItems?.length ? mapDynamic(dynamicItems) : defaultItems;
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-3 py-4">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/" search={search} className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center border border-primary/60 bg-background neon-border">
             <Activity className="h-4 w-4 text-primary" />
           </div>
@@ -82,10 +90,21 @@ export function AppSidebar({ dynamicItems }: Props) {
                 return (
                   <SidebarMenuItem key={`${item.url}-${item.title}`}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
-                      <Link to={item.url} className="font-mono text-xs uppercase tracking-wider">
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
+                      {isDashboardHref(item.url) ? (
+                        <Link
+                          to={item.url}
+                          search={search}
+                          className="font-mono text-xs uppercase tracking-wider"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      ) : (
+                        <a href={item.url} className="font-mono text-xs uppercase tracking-wider">
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </a>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
