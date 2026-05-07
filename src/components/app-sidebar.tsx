@@ -3,8 +3,8 @@ import {
   LayoutDashboard,
   Boxes,
   ShoppingCart,
-  Settings,
   Activity,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -32,7 +32,6 @@ const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard },
   { title: "Wagoo", url: "/wagoo", icon: Boxes },
   { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
-  { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 
 function iconFromHint(hint?: string): LucideIcon {
@@ -114,6 +113,10 @@ export function AppSidebar({ dynamicItems }: Props) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-3">
+        <div className="mb-2 flex items-center gap-2 rounded-sm border border-sidebar-border/70 bg-sidebar-accent/30 px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground group-data-[collapsible=icon]:hidden">
+          <Wrench className="h-3.5 w-3.5" />
+          configurações em construção
+        </div>
         <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground group-data-[collapsible=icon]:hidden">
           <span className="h-1.5 w-1.5 animate-pulse bg-primary" />
           system online

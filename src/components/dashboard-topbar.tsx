@@ -69,14 +69,8 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
   const periodLabel =
     PERIODS.find((p) => p.days === period_days)?.label ?? `Últimos ${period_days} dias`;
 
-  const remoteTitle =
-    topbarUi && typeof topbarUi === "object" && topbarUi !== null && "title" in topbarUi
-      ? String((topbarUi as { title?: unknown }).title ?? "")
-      : "";
-  const remoteSubtitle =
-    topbarUi && typeof topbarUi === "object" && topbarUi !== null && "subtitle" in topbarUi
-      ? String((topbarUi as { subtitle?: unknown }).subtitle ?? "")
-      : "";
+  const remoteTitle = topbarUi?.title ?? "";
+  const remoteSubtitle = topbarUi?.subtitle ?? "";
 
   return (
     <header className="sticky top-0 z-20 flex h-14 flex-wrap items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur">

@@ -18,10 +18,11 @@ export type ChartPointReceita = { t: string; receita: number };
 export type ChartPointVolume = { t: string; volume: number };
 
 export type UiSidebarItem = { label: string; href: string; icon?: string };
+export type DashboardTopbarUi = { title?: string; subtitle?: string };
 
 export type DashboardUiConfig = {
   sidebar_itens?: UiSidebarItem[];
-  topbar?: Record<string, unknown>;
+  topbar?: DashboardTopbarUi;
 };
 
 export type DashboardViewModel = {
@@ -202,8 +203,13 @@ function parseUi(raw: unknown): DashboardUiConfig {
     }
     if (!sidebar_itens.length) sidebar_itens = undefined;
   }
-  const topbar = record(o.topbar);
-  return { sidebar_itens, topbar: topbar ?? undefined };
+  const topbarRaw = record(o.topbar);
+  const title = topbarRaw && typeof topbarRaw.title === "string" ? topbarRaw.title : undefined;
+  const subtitle =
+    topbarRaw && typeof topbarRaw.subtitle === "string" ? topbarRaw.subtitle : undefined;
+  const topbar: DashboardTopbarUi | undefined =
+    title || subtitle ? { ...(title ? { title } : {}), ...(subtitle ? { subtitle } : {}) } : undefined;
+  return { sidebar_itens, topbar };
 }
 
 export function formatBrl(n: number): string {
@@ -273,8 +279,11 @@ export function mapDashboardApiPayload(
   const ui = parseUi(root.ui);
 
   const gerado_em =
-    (typeof root.gerado_em === "string" && root.gerado_em) ||
-    (typeof root.generated_at === "string" && root.generated_at);
+    typeof root.gerado_em === "string"
+      ? root.gerado_em
+      : typeof root.generated_at === "string"
+        ? root.generated_at
+        : undefined;
 
   const ok = typeof root.ok === "boolean" ? root.ok : true;
 
@@ -325,10 +334,10 @@ function mergeUiConfigs(w: DashboardUiConfig | undefined, a: DashboardUiConfig |
       sidebar_itens.push({ ...it, href });
     }
   }
-  const topbar = {
-    ...(typeof w?.topbar === "object" && w.topbar ? w.topbar : {}),
-    ...(typeof a?.topbar === "object" && a.topbar ? a.topbar : {}),
-  } as Record<string, unknown>;
+  const topbar: DashboardTopbarUi = {
+    ...(w?.topbar ?? {}),
+    ...(a?.topbar ?? {}),
+  };
   return {
     sidebar_itens: sidebar_itens.length ? sidebar_itens : undefined,
     topbar: Object.keys(topbar).length ? topbar : undefined,

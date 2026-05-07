@@ -41,7 +41,7 @@ type FetchDashboardInputCtx = { data: DashboardQueryInput };
 
 export const fetchKorvenDashboard = createServerFn({ method: "GET" })
   .inputValidator(dashboardQuerySchema)
-  .handler(async (ctx): Promise<DashboardViewModel> => {
+  .handler((async (ctx): Promise<DashboardViewModel> => {
     const { data } = ctx as FetchDashboardInputCtx;
     setResponseHeaders(
       new Headers({
@@ -103,4 +103,4 @@ export const fetchKorvenDashboard = createServerFn({ method: "GET" })
       const msg = error instanceof Error ? error.message : String(error);
       return buildFallbackDashboardViewModel(filtros, `Falha no backend dashboard: ${msg}`);
     }
-  });
+  }) as any);
