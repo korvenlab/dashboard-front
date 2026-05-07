@@ -1,5 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare: só válido se voltares a usar @cloudflare/vite-plugin no vite.config (deploy actual = Nitro/Vercel).
   "name": "tanstack-start-app",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
