@@ -83,6 +83,12 @@ function asNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+function isAdminRoleOption(v: unknown): v is AdminRoleOption {
+  if (!v || typeof v !== "object") return false;
+  const r = v as Partial<AdminRoleOption>;
+  return typeof r.value === "string" && typeof r.label === "string";
+}
+
 function normalizeUser(raw: unknown): AdminUser | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -197,7 +203,7 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
         (Array.isArray(root?.items) && (root?.items as unknown[])) ||
         (Array.isArray(root?.roles) && (root?.roles as unknown[])) ||
         (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
-      const items = itemsRaw
+      const itemsMaybe = itemsRaw
         .map((it) => {
           if (typeof it === "string") return { value: it, label: it };
           const r = asRecord(it);
@@ -215,7 +221,8 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
             permissions,
           };
         })
-        .filter((x): x is AdminRoleOption => !!x);
+        .filter((x): x is AdminRoleOption => isAdminRoleOption(x));
+      const items: AdminRoleOption[] = itemsMaybe;
       if (items.length > 0) return { items, fromFallback: false };
       fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
     } catch (e) {
