@@ -32,6 +32,7 @@ function AdminPage() {
   const [assets, setAssets] = useState<AdminUserAsset[] | null>(null);
   const [roles, setRoles] = useState<AdminRoleOption[]>([]);
   const [rolesFromFallback, setRolesFromFallback] = useState(false);
+  const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
 
   async function load(page = 1) {
@@ -99,6 +100,8 @@ function AdminPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil((pageData.total || 0) / pageData.limit));
+  const roleLabelBySlug = new Map(roles.map((r) => [r.value, r.label]));
+  const rolePermissionsBySlug = new Map(roles.map((r) => [r.value, r.permissions ?? []]));
 
   useEffect(() => {
     void load(1);
@@ -107,9 +110,11 @@ function AdminPage() {
         const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
         setRoles(result.items);
         setRolesFromFallback(result.fromFallback);
+        setRolesFallbackReason(result.fallbackReason ?? "");
       } catch (e) {
         setRoles([]);
         setRolesFromFallback(false);
+        setRolesFallbackReason("");
         setMessage(e instanceof Error ? e.message : String(e));
       }
     })();
@@ -179,7 +184,7 @@ function AdminPage() {
       ) : null}
       {rolesFromFallback ? (
         <div className="rounded border border-chart-4/60 bg-chart-4/10 px-3 py-2 font-mono text-xs text-chart-4">
-          {source}: backend não expôs <code>/api/admin/roles</code>; usando fallback por roles existentes na listagem de usuários.
+          {source}: fallback de roles ativo. Motivo: {rolesFallbackReason || "backend não expôs /api/admin/roles"}.
         </div>
       ) : null}
 
@@ -201,7 +206,9 @@ function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs">{u.email ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{u.name ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-xs">
-                  <span className="rounded border border-border/70 bg-card px-2 py-0.5">{u.role}</span>
+                  <span className="rounded border border-border/70 bg-card px-2 py-0.5">
+                    {roleLabelBySlug.get(u.role) ?? `Sem catálogo (${u.role})`}
+                  </span>
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {u.active ? (
@@ -220,6 +227,7 @@ function AdminPage() {
                     <select
                       className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
                       value={roleDraftByUser[u.id] ?? u.role}
+                      title={(rolePermissionsBySlug.get(roleDraftByUser[u.id] ?? u.role) ?? []).join(", ")}
                       onChange={(e) =>
                         setRoleDraftByUser((prev) => ({
                           ...prev,
@@ -231,7 +239,11 @@ function AdminPage() {
                         ? roles
                         : [{ value: u.role, label: u.role }]
                       ).map((r) => (
-                        <option key={r.value} value={r.value}>
+                        <option
+                          key={r.value}
+                          value={r.value}
+                          title={[r.description ?? "", ...(r.permissions ?? [])].filter(Boolean).join(" | ")}
+                        >
                           {r.label}
                         </option>
                       ))}

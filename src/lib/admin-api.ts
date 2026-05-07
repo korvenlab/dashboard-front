@@ -24,11 +24,14 @@ export type AdminUsersPage = {
 export type AdminRoleOption = {
   value: string;
   label: string;
+  description?: string | null;
+  permissions?: string[];
 };
 
 export type AdminRolesResult = {
   items: AdminRoleOption[];
   fromFallback: boolean;
+  fallbackReason?: string;
 };
 
 export type AdminUserAsset = {
@@ -183,26 +186,40 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
   .inputValidator(z.object({ source: sourceSchema }))
   .handler((async (ctx: unknown): Promise<AdminRolesResult> => {
     const { data } = ctx as { data: { source: AdminSource } };
+    let fallbackReason = "rota /api/admin/roles indisponível";
     try {
       const raw = await callAdminApi(data.source, "GET", "/api/admin/roles");
       const root = asRecord(raw);
       const dataRoot = asRecord(root?.data);
       const itemsRaw =
         (Array.isArray(dataRoot?.items) && dataRoot?.items) ||
+        (Array.isArray(dataRoot?.roles) && dataRoot?.roles) ||
+        (Array.isArray(root?.items) && (root?.items as unknown[])) ||
+        (Array.isArray(root?.roles) && (root?.roles as unknown[])) ||
         (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
       const items = itemsRaw
         .map((it) => {
           if (typeof it === "string") return { value: it, label: it };
           const r = asRecord(it);
           if (!r) return null;
-          const value = asString(r.value) ?? asString(r.role);
+          const value = asString(r.slug) ?? asString(r.value) ?? asString(r.role);
           if (!value) return null;
-          return { value, label: asString(r.label) ?? value };
+          const permsRaw = Array.isArray(r.permissions) ? r.permissions : [];
+          const permissions = permsRaw
+            .map((p) => (typeof p === "string" ? p : null))
+            .filter((p): p is string => !!p);
+          return {
+            value,
+            label: asString(r.label) ?? value,
+            description: asString(r.description),
+            permissions,
+          };
         })
         .filter((x): x is AdminRoleOption => !!x);
       if (items.length > 0) return { items, fromFallback: false };
-    } catch {
-      // fallback abaixo
+      fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
+    } catch (e) {
+      fallbackReason = e instanceof Error ? e.message : String(e);
     }
 
     // fallback: infere roles existentes na listagem de usuários
@@ -210,7 +227,11 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
       data: { source: data.source, page: 1, limit: 100 },
     })) as AdminUsersPage;
     const unique = [...new Set(usersPage.items.map((u) => u.role).filter(Boolean))];
-    return { items: unique.map((r) => ({ value: r, label: r })), fromFallback: true };
+    return {
+      items: unique.map((r) => ({ value: r, label: r })),
+      fromFallback: true,
+      fallbackReason,
+    };
   }) as any);
 
 export const fetchAdminUser = createServerFn({ method: "GET" })
