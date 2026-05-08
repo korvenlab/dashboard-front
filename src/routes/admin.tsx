@@ -256,10 +256,13 @@ function AdminPage() {
           </button>
         </div>
         {source === "wagoo" ? (
-          <p className="mt-2 max-w-2xl font-mono text-[10px] leading-relaxed text-muted-foreground">
-            Coluna de pagamento usa <span className="text-foreground/90">profiles.has_paid</span> devolvida pela API
-            (webhooks da Stripe também atualizam esse campo). Os botões “marcar pago / não pago” gravam a mesma coluna.
-          </p>
+          <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
+            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — pagamento</span>
+            <span className="mx-1.5 text-muted-foreground">·</span>
+            A coluna no banco é <code className="rounded bg-muted px-1 py-0.5 text-[10px]">profiles.has_paid</code>
+            (API devolve como <code className="rounded bg-muted px-1 py-0.5 text-[10px]">hasPaid</code>). A Stripe atualiza
+            esse campo via webhook. Os botões “marcar pago / não pago” chamam o wag-backend e gravam a mesma coluna.
+          </div>
         ) : null}
       </section>
 
