@@ -8,12 +8,16 @@ export const rootSearchSchema = z.object({
     (v) => (v === "" || v === null || v === undefined ? undefined : v),
     z.string().optional(),
   ),
-  period_days: z.coerce.number().min(1).max(366).catch(30),
+  period_days: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.coerce.number().min(1).max(366).optional(),
+  ),
   chart_days: z.preprocess((v) => {
+    if (v === "" || v === null || v === undefined) return undefined;
     const n = typeof v === "string" || typeof v === "number" ? Number(v) : NaN;
-    if (!Number.isFinite(n)) return 14;
+    if (!Number.isFinite(n)) return undefined;
     return Math.min(90, Math.max(1, Math.round(n)));
-  }, z.number()),
+  }, z.number().optional()),
 });
 
 export type RootSearch = z.infer<typeof rootSearchSchema>;
@@ -22,7 +26,7 @@ export function parseRootSearch(search: Record<string, unknown>): RootSearch {
   const parsed = rootSearchSchema.safeParse(search);
   const base: RootSearch = parsed.success
     ? parsed.data
-    : { period_days: 30, chart_days: 14, organization_id: undefined };
+    : { period_days: undefined, chart_days: undefined, organization_id: undefined };
   const trimmed =
     typeof base.organization_id === "string" ? base.organization_id.trim() : undefined;
   const organization_id =

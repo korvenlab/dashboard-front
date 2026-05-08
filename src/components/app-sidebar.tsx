@@ -47,6 +47,9 @@ function mapDynamic(items: UiSidebarItem[]): { title: string; url: string; icon:
   if (!mapped.some((it) => it.url === "/admin")) {
     mapped.push({ title: "Admin", url: "/admin", icon: ShieldUser });
   }
+  if (!mapped.some((it) => it.url === "/monitoramento")) {
+    mapped.push({ title: "Monitoramento", url: "/monitoramento", icon: Activity });
+  }
   return mapped;
 }
 

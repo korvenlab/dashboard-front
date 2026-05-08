@@ -53,7 +53,7 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
   const path = useRouterState({ select: (s) => s.location.pathname });
 
   const organization_id = search.organization_id;
-  const period_days = search.period_days;
+  const period_days = search.period_days ?? 30;
 
   let orgChoices = [...ORGS];
   if (organization_id && !orgChoices.some((o) => o.value === organization_id)) {
