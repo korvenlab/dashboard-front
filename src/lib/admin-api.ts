@@ -10,6 +10,8 @@ export type AdminUser = {
   name: string | null;
   role: string;
   active: boolean;
+  /** Wagoo: espelha `profiles.has_paid` quando o backend expõe o campo. */
+  hasPaid?: boolean;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -67,6 +69,12 @@ const statusSchema = byIdSchema.extend({
   active: z.boolean(),
 });
 
+const wagooHasPaidSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  hasPaid: z.boolean(),
+});
+
 function asRecord(v: unknown): Record<string, unknown> | undefined {
   return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
 }
@@ -83,6 +91,47 @@ function asNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+/** Backend pode devolver `error` como string ou objeto `{ message, detail }`. */
+function extractApiErrorMessage(root: Record<string, unknown> | undefined, source: AdminSource, httpStatus: number): string {
+  const err = root?.error;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  const errRec = asRecord(err);
+  if (errRec) {
+    const nested =
+      asString(errRec.message) ??
+      asString(errRec.error) ??
+      asString(errRec.detail) ??
+      asString(errRec.description);
+    if (nested?.trim()) return nested.trim();
+    try {
+      return `${source}: ${JSON.stringify(errRec)}`;
+    } catch {
+      /* ignore */
+    }
+  }
+  const code = asString(root?.code);
+  const msg = asString(root?.message);
+  const parts = [code, msg].filter((x): x is string => !!x?.trim());
+  if (parts.length) return parts.join(" — ");
+  return `${source}: HTTP ${httpStatus}`;
+}
+
+function stringifyCaughtUnknown(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const m = asString(o.message) ?? asString(o.error) ?? asString(o.detail);
+    if (m?.trim()) return m.trim();
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "erro desconhecido";
+    }
+  }
+  return String(e);
+}
+
 function isAdminRoleOption(v: unknown): v is AdminRoleOption {
   if (!v || typeof v !== "object") return false;
   const r = v as Partial<AdminRoleOption>;
@@ -94,7 +143,14 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (!r) return null;
   const id = asString(r.id);
   if (!id) return null;
-  return {
+  const hasPaidRaw = r.hasPaid ?? r.has_paid;
+  const hasPaid =
+    typeof hasPaidRaw === "boolean"
+      ? hasPaidRaw
+      : typeof hasPaidRaw === "string"
+        ? hasPaidRaw === "true"
+        : undefined;
+  const out: AdminUser = {
     id,
     email: asString(r.email),
     name: asString(r.name),
@@ -103,6 +159,8 @@ function normalizeUser(raw: unknown): AdminUser | null {
     createdAt: asString(r.createdAt) ?? asString(r.created_at),
     lastSignInAt: asString(r.lastSignInAt) ?? asString(r.last_sign_in_at),
   };
+  if (typeof hasPaid === "boolean") out.hasPaid = hasPaid;
+  return out;
 }
 
 function normalizeAsset(raw: unknown): AdminUserAsset | null {
@@ -161,8 +219,7 @@ async function callAdminApi(
   const json = text ? (JSON.parse(text) as unknown) : {};
   const root = asRecord(json);
   if (!res.ok || root?.ok === false) {
-    const msg = asString(root?.error) ?? `${source}: HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error(extractApiErrorMessage(root, source, res.status));
   }
   return json;
 }
@@ -192,6 +249,10 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
   .inputValidator(z.object({ source: sourceSchema }))
   .handler((async (ctx: unknown): Promise<AdminRolesResult> => {
     const { data } = ctx as { data: { source: AdminSource } };
+    // Wagoo: console Korven não lista/edita roles; wag-backend não expunha /roles → evita fallback e 404.
+    if (data.source === "wagoo") {
+      return { items: [], fromFallback: false };
+    }
     let fallbackReason = "rota /api/admin/roles indisponível";
     try {
       const raw = await callAdminApi(data.source, "GET", "/api/admin/roles");
@@ -227,7 +288,7 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
       if (items.length > 0) return { items, fromFallback: false };
       fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
     } catch (e) {
-      fallbackReason = e instanceof Error ? e.message : String(e);
+      fallbackReason = stringifyCaughtUnknown(e);
     }
 
     // fallback: infere roles existentes na listagem de usuários
@@ -288,6 +349,22 @@ export const patchAdminUserStatus = createServerFn({ method: "POST" })
     );
     const root = asRecord(raw);
     return normalizeUser(root?.data ?? { id: data.id, active: data.active });
+  }) as any);
+
+/** Wagoo: PATCH `/api/admin/users/:id/has-paid` no wag-backend. */
+export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
+  .inputValidator(wagooHasPaidSchema)
+  .handler((async (ctx: unknown): Promise<AdminUser | null> => {
+    const { data } = ctx as { data: z.infer<typeof wagooHasPaidSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "PATCH",
+      `/api/admin/users/${encodeURIComponent(data.id)}/has-paid`,
+      { hasPaid: data.hasPaid },
+    );
+    const root = asRecord(raw);
+    const payload = asRecord(root?.data);
+    return normalizeUser(payload ?? { id: data.id, hasPaid: data.hasPaid });
   }) as any);
 
 export const deleteAdminUser = createServerFn({ method: "POST" })

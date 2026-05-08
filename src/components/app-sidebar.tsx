@@ -6,6 +6,7 @@ import {
   ShieldUser,
   Activity,
   MessageSquare,
+  SquareKanban,
   Wrench,
   LogOut,
   type LucideIcon,
@@ -25,7 +26,7 @@ import {
 import type { UiSidebarItem } from "@/lib/dashboard-view";
 import type { RootSearch } from "@/lib/root-search";
 
-type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin" | "/monitoramento" | "/mensagens";
+type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin" | "/tasks" | "/monitoramento" | "/mensagens";
 
 function isDashboardHref(url: string): url is DashboardHref {
   return (
@@ -33,6 +34,7 @@ function isDashboardHref(url: string): url is DashboardHref {
     url === "/wagoo" ||
     url === "/avendas" ||
     url === "/admin" ||
+    url === "/tasks" ||
     url === "/monitoramento" ||
     url === "/mensagens"
   );
@@ -43,6 +45,7 @@ const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Wagoo", url: "/wagoo", icon: Boxes },
   { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
   { title: "Admin", url: "/admin", icon: ShieldUser },
+  { title: "Tasks", url: "/tasks", icon: SquareKanban },
   { title: "Monitoramento", url: "/monitoramento", icon: Activity },
   { title: "Mensagens", url: "/mensagens", icon: MessageSquare },
 ];
@@ -71,6 +74,9 @@ function mapDynamic(items: UiSidebarItem[]): { title: string; url: string; icon:
   }
   if (!mapped.some((it) => it.url === "/mensagens")) {
     mapped.push({ title: "Mensagens", url: "/mensagens", icon: MessageSquare });
+  }
+  if (!mapped.some((it) => it.url === "/tasks")) {
+    mapped.push({ title: "Tasks", url: "/tasks", icon: SquareKanban });
   }
   return mapped;
 }

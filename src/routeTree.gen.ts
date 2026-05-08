@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WagooRouteImport } from './routes/wagoo'
+import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as MonitoramentoRouteImport } from './routes/monitoramento'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as AvendasRouteImport } from './routes/avendas'
@@ -19,6 +20,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WagooRoute = WagooRouteImport.update({
   id: '/wagoo',
   path: '/wagoo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoramentoRoute = MonitoramentoRouteImport.update({
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/tasks': typeof TasksRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/tasks': typeof TasksRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesById {
@@ -70,14 +78,37 @@ export interface FileRoutesById {
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
   '/monitoramento': typeof MonitoramentoRoute
+  '/tasks': typeof TasksRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/avendas' | '/mensagens' | '/monitoramento' | '/wagoo'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/avendas'
+    | '/mensagens'
+    | '/monitoramento'
+    | '/tasks'
+    | '/wagoo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/avendas' | '/mensagens' | '/monitoramento' | '/wagoo'
-  id: '__root__' | '/' | '/admin' | '/avendas' | '/mensagens' | '/monitoramento' | '/wagoo'
+  to:
+    | '/'
+    | '/admin'
+    | '/avendas'
+    | '/mensagens'
+    | '/monitoramento'
+    | '/tasks'
+    | '/wagoo'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/avendas'
+    | '/mensagens'
+    | '/monitoramento'
+    | '/tasks'
+    | '/wagoo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -86,6 +117,7 @@ export interface RootRouteChildren {
   AvendasRoute: typeof AvendasRoute
   MensagensRoute: typeof MensagensRoute
   MonitoramentoRoute: typeof MonitoramentoRoute
+  TasksRoute: typeof TasksRoute
   WagooRoute: typeof WagooRoute
 }
 
@@ -96,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/wagoo'
       fullPath: '/wagoo'
       preLoaderRoute: typeof WagooRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoramento': {
@@ -142,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   AvendasRoute: AvendasRoute,
   MensagensRoute: MensagensRoute,
   MonitoramentoRoute: MonitoramentoRoute,
+  TasksRoute: TasksRoute,
   WagooRoute: WagooRoute,
 }
 export const routeTree = rootRouteImport

@@ -5,6 +5,7 @@ import {
   fetchAdminUserAssets,
   fetchAdminRoles,
   fetchAdminUsers,
+  patchAdminUserHasPaid,
   patchAdminUserRole,
   patchAdminUserStatus,
   type AdminRoleOption,
@@ -17,6 +18,19 @@ import {
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
+
+function stringifyUnknown(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "erro desconhecido";
+    }
+  }
+  return String(e);
+}
 
 function AdminPage() {
   const [source, setSource] = useState<AdminSource>("wagoo");
@@ -104,6 +118,26 @@ function AdminPage() {
     }
   }
 
+  async function setWagooPaid(user: AdminUser, hasPaid: boolean) {
+    setUserBusy(user.id, "hasPaid");
+    setMessage("");
+    try {
+      await patchAdminUserHasPaid({
+        data: { source: "wagoo", id: user.id, hasPaid },
+      });
+      await load(pageData.page, "wagoo");
+      setMessage(
+        hasPaid
+          ? `Marcado como pago: ${user.email ?? user.id}.`
+          : `Marcado como não pago: ${user.email ?? user.id}.`,
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearUserBusy(user.id);
+    }
+  }
+
   async function permanentlyDeleteAccount(user: AdminUser) {
     const actionSource = pageSource;
     const ok = confirm(
@@ -146,22 +180,37 @@ function AdminPage() {
   const rolePermissionsBySlug = new Map(roles.map((r) => [r.value, r.permissions ?? []]));
 
   useEffect(() => {
+    let cancelled = false;
     setPageData({ items: [], page: 1, limit: 20, total: 0 });
     setAssets(null);
     void load(1, source);
-    void (async () => {
-      try {
-        const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
-        setRoles(result.items);
-        setRolesFromFallback(result.fromFallback);
-        setRolesFallbackReason(result.fallbackReason ?? "");
-      } catch (e) {
-        setRoles([]);
-        setRolesFromFallback(false);
-        setRolesFallbackReason("");
-        setMessage(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    if (source === "2avendas") {
+      void (async () => {
+        try {
+          const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
+          if (cancelled) return;
+          setRoles(result.items);
+          setRolesFromFallback(result.fromFallback);
+          const fr = result.fallbackReason;
+          setRolesFallbackReason(
+            typeof fr === "string" ? fr : fr != null ? JSON.stringify(fr) : "",
+          );
+        } catch (e) {
+          if (cancelled) return;
+          setRoles([]);
+          setRolesFromFallback(false);
+          setRolesFallbackReason("");
+          setMessage(e instanceof Error ? e.message : stringifyUnknown(e));
+        }
+      })();
+    } else {
+      setRoles([]);
+      setRolesFromFallback(false);
+      setRolesFallbackReason("");
+    }
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
@@ -232,9 +281,10 @@ function AdminPage() {
           {message}
         </div>
       ) : null}
-      {rolesFromFallback ? (
+      {source === "2avendas" && pageSource === "2avendas" && rolesFromFallback ? (
         <div className="rounded border border-chart-4/60 bg-chart-4/10 px-3 py-2 font-mono text-xs text-chart-4">
-          {source}: fallback de roles ativo. Motivo: {rolesFallbackReason || "backend não expôs /api/admin/roles"}.
+          {source}: fallback de roles ativo. Motivo:{" "}
+          {rolesFallbackReason.trim() || "backend não expôs /api/admin/roles"}.
         </div>
       ) : null}
 
@@ -244,7 +294,9 @@ function AdminPage() {
             <tr className="border-b border-border bg-card">
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Email</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Nome</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Role</th>
+              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                {pageSource === "wagoo" ? "Pagamento" : "Role"}
+              </th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Status</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Criado</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ações</th>
@@ -256,9 +308,25 @@ function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs">{u.email ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{u.name ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-xs">
-                  <span className="rounded border border-border/70 bg-card px-2 py-0.5">
-                    {roleLabelBySlug.get(u.role) ?? `Sem catálogo (${u.role})`}
-                  </span>
+                  {pageSource === "wagoo" ? (
+                    typeof u.hasPaid === "boolean" ? (
+                      u.hasPaid ? (
+                        <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                          pago
+                        </span>
+                      ) : (
+                        <span className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+                          não pago
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )
+                  ) : (
+                    <span className="rounded border border-border/70 bg-card px-2 py-0.5">
+                      {roleLabelBySlug.get(u.role) ?? `Sem catálogo (${u.role})`}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {u.active ? (
@@ -283,38 +351,63 @@ function AdminPage() {
                         trocando origem...
                       </span>
                     ) : null}
-                    <select
-                      className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
-                      value={roleDraftByUser[u.id] ?? u.role}
-                      title={(rolePermissionsBySlug.get(roleDraftByUser[u.id] ?? u.role) ?? []).join(", ")}
-                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                      onChange={(e) =>
-                        setRoleDraftByUser((prev) => ({
-                          ...prev,
-                          [u.id]: e.target.value,
-                        }))
-                      }
-                    >
-                      {(roles.length
-                        ? roles
-                        : [{ value: u.role, label: u.role }]
-                      ).map((r) => (
-                        <option
-                          key={r.value}
-                          value={r.value}
-                          title={[r.description ?? "", ...(r.permissions ?? [])].filter(Boolean).join(" | ")}
+                    {pageSource === "wagoo" ? (
+                      <>
+                        <button
+                          className="rounded border border-emerald-500/40 px-2 py-1 font-mono text-[10px] text-emerald-300 hover:bg-emerald-500/10"
+                          onClick={() => setWagooPaid(u, true)}
+                          disabled={
+                            Boolean(busyActionByUser[u.id]) || sourceSwitching || u.hasPaid === true
+                          }
                         >
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
-                      onClick={() => makeAdmin(u)}
-                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                    >
-                      {busyActionByUser[u.id] === "role" ? "salvando..." : "salvar role"}
-                    </button>
+                          {busyActionByUser[u.id] === "hasPaid" ? "salvando..." : "marcar pago"}
+                        </button>
+                        <button
+                          className="rounded border border-amber-500/40 px-2 py-1 font-mono text-[10px] text-amber-200 hover:bg-amber-500/10"
+                          onClick={() => setWagooPaid(u, false)}
+                          disabled={
+                            Boolean(busyActionByUser[u.id]) || sourceSwitching || u.hasPaid === false
+                          }
+                        >
+                          {busyActionByUser[u.id] === "hasPaid" ? "salvando..." : "marcar não pago"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <select
+                          className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
+                          value={roleDraftByUser[u.id] ?? u.role}
+                          title={(rolePermissionsBySlug.get(roleDraftByUser[u.id] ?? u.role) ?? []).join(", ")}
+                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
+                          onChange={(e) =>
+                            setRoleDraftByUser((prev) => ({
+                              ...prev,
+                              [u.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          {(roles.length
+                            ? roles
+                            : [{ value: u.role, label: u.role }]
+                          ).map((r) => (
+                            <option
+                              key={r.value}
+                              value={r.value}
+                              title={[r.description ?? "", ...(r.permissions ?? [])].filter(Boolean).join(" | ")}
+                            >
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
+                          onClick={() => makeAdmin(u)}
+                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
+                        >
+                          {busyActionByUser[u.id] === "role" ? "salvando..." : "salvar role"}
+                        </button>
+                      </>
+                    )}
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => toggleActive(u)}
