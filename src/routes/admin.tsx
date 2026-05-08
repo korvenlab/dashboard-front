@@ -255,6 +255,12 @@ function AdminPage() {
             2AVendas
           </button>
         </div>
+        {source === "wagoo" ? (
+          <p className="mt-2 max-w-2xl font-mono text-[10px] leading-relaxed text-muted-foreground">
+            Coluna de pagamento usa <span className="text-foreground/90">profiles.has_paid</span> devolvida pela API
+            (webhooks da Stripe também atualizam esse campo). Os botões “marcar pago / não pago” gravam a mesma coluna.
+          </p>
+        ) : null}
       </section>
 
       <section className="flex flex-wrap items-end gap-2 rounded border border-border bg-card/40 p-3">
@@ -295,7 +301,7 @@ function AdminPage() {
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Email</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Nome</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                {pageSource === "wagoo" ? "Pagamento" : "Role"}
+                {pageSource === "wagoo" ? "Pagamento (has_paid)" : "Role"}
               </th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Status</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Criado</th>

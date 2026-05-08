@@ -47,13 +47,19 @@ function loadBoard(): KorvenTaskCard[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as BoardV1;
     if (parsed?.version !== 1 || !Array.isArray(parsed.cards)) return [];
-    return parsed.cards.filter(
-      (c) =>
-        c &&
-        typeof c.id === "string" &&
-        COLUMNS.some((col) => col.id === c.columnId) &&
-        typeof c.title === "string",
-    );
+    return parsed.cards
+      .filter(
+        (c) =>
+          c &&
+          typeof c.id === "string" &&
+          COLUMNS.some((col) => col.id === c.columnId) &&
+          typeof c.title === "string" &&
+          typeof c.createdAt === "number",
+      )
+      .map((c) => ({
+        ...c,
+        note: typeof c.note === "string" ? c.note : "",
+      }));
   } catch {
     return [];
   }
@@ -185,8 +191,8 @@ function TasksPage() {
       <div>
         <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Tasks</h1>
         <p className="mt-1 max-w-2xl font-mono text-xs text-muted-foreground">
-          Quadro estilo Trello para ideias e entregas da Korven Lab. Os dados ficam neste navegador
-          (localStorage). Arraste os cartões entre colunas.
+          Quadro estilo Trello para ideias e entregas da Korven Lab. Os dados ficam neste navegador (localStorage).
+          Arraste os cartões entre colunas.
         </p>
       </div>
 

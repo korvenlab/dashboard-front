@@ -138,18 +138,50 @@ function isAdminRoleOption(v: unknown): v is AdminRoleOption {
   return typeof r.value === "string" && typeof r.label === "string";
 }
 
+/** Aceita boolean, 0/1, strings comuns e valores vindos do Postgres via JSON. */
+function coerceHasPaid(v: unknown): boolean | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number" && Number.isFinite(v)) return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (["true", "1", "yes", "t"].includes(s)) return true;
+    if (["false", "0", "no", "f"].includes(s)) return false;
+  }
+  return undefined;
+}
+
+/**
+ * Coluna `profiles.has_paid` no Wagoo: o wag-backend pode enviar no topo, em `profile`,
+ * em `profiles[0]` (join Supabase) ou como `hasPaid` / `has_paid`.
+ */
+function extractHasPaidFromUserPayload(raw: Record<string, unknown>): boolean | undefined {
+  const profile = asRecord(raw.profile);
+  const profilesArr = Array.isArray(raw.profiles) ? raw.profiles : null;
+  const firstProfile = profilesArr?.length ? asRecord(profilesArr[0]) : undefined;
+
+  const candidates = [
+    raw.hasPaid,
+    raw.has_paid,
+    profile?.hasPaid,
+    profile?.has_paid,
+    firstProfile?.hasPaid,
+    firstProfile?.has_paid,
+  ];
+
+  for (const c of candidates) {
+    const b = coerceHasPaid(c);
+    if (b !== undefined) return b;
+  }
+  return undefined;
+}
+
 function normalizeUser(raw: unknown): AdminUser | null {
   const r = asRecord(raw);
   if (!r) return null;
   const id = asString(r.id);
   if (!id) return null;
-  const hasPaidRaw = r.hasPaid ?? r.has_paid;
-  const hasPaid =
-    typeof hasPaidRaw === "boolean"
-      ? hasPaidRaw
-      : typeof hasPaidRaw === "string"
-        ? hasPaidRaw === "true"
-        : undefined;
+  const hasPaid = extractHasPaidFromUserPayload(r);
   const out: AdminUser = {
     id,
     email: asString(r.email),
@@ -159,7 +191,7 @@ function normalizeUser(raw: unknown): AdminUser | null {
     createdAt: asString(r.createdAt) ?? asString(r.created_at),
     lastSignInAt: asString(r.lastSignInAt) ?? asString(r.last_sign_in_at),
   };
-  if (typeof hasPaid === "boolean") out.hasPaid = hasPaid;
+  if (hasPaid !== undefined) out.hasPaid = hasPaid;
   return out;
 }
 
@@ -351,7 +383,7 @@ export const patchAdminUserStatus = createServerFn({ method: "POST" })
     return normalizeUser(root?.data ?? { id: data.id, active: data.active });
   }) as any);
 
-/** Wagoo: PATCH `/api/admin/users/:id/has-paid` no wag-backend. */
+/** Wagoo: PATCH `/api/admin/users/:id/has-paid` → atualiza `profiles.has_paid` (Stripe webhook também escreve na coluna). */
 export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
   .inputValidator(wagooHasPaidSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
