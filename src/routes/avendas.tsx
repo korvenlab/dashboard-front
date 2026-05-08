@@ -25,6 +25,7 @@ function AvendasPage() {
   const receita = dashboard.kpis.find((k) => k.label.toLowerCase().includes("receita")) ?? dashboard.kpis[0];
   const uptime = dashboard.kpis.find((k) => k.label.toLowerCase().includes("uptime")) ?? dashboard.kpis[3];
   const kpis = [volume, receita, uptime].filter(Boolean);
+  const hasData = kpis.length > 0 || dashboard.avendasVolumePorDia.length > 0 || events.length > 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -39,6 +40,11 @@ function AvendasPage() {
           <KpiCard key={k.label} {...k} />
         ))}
       </div>
+      {!hasData ? (
+        <div className="rounded border border-dashed border-border/70 bg-card/30 p-4 font-mono text-xs text-muted-foreground">
+          Sem dados de 2AVendas para o período/filtro atual.
+        </div>
+      ) : null}
       <VolumeBarChart data={dashboard.avendasVolumePorDia} chartDays={chartDays} />
       <EventsTable events={events.length ? events : dashboard.events} />
     </div>

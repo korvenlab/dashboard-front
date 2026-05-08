@@ -20,6 +20,7 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
   const [source, setSource] = useState<AdminSource>("wagoo");
+  const [pageSource, setPageSource] = useState<AdminSource>("wagoo");
   const [search, setSearch] = useState("");
   const [pageData, setPageData] = useState<{ items: AdminUser[]; page: number; limit: number; total: number }>({
     items: [],
@@ -34,15 +35,31 @@ function AdminPage() {
   const [rolesFromFallback, setRolesFromFallback] = useState(false);
   const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
+  const [busyActionByUser, setBusyActionByUser] = useState<Record<string, string>>({});
 
-  async function load(page = 1) {
+  function setUserBusy(userId: string, label: string) {
+    setBusyActionByUser((prev) => ({ ...prev, [userId]: label }));
+  }
+
+  function clearUserBusy(userId: string) {
+    setBusyActionByUser((prev) => {
+      if (!(userId in prev)) return prev;
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
+  }
+
+  async function load(page = 1, sourceOverride?: AdminSource) {
+    const targetSource = sourceOverride ?? source;
     setLoading(true);
     setMessage("");
     try {
       const data = (await fetchAdminUsers({
-        data: { source, search: search.trim() || undefined, page, limit: 20 },
+        data: { source: targetSource, search: search.trim() || undefined, page, limit: 20 },
       })) as { items: AdminUser[]; page: number; limit: number; total: number };
       setPageData(data);
+      setPageSource(targetSource);
       setAssets(null);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -53,49 +70,72 @@ function AdminPage() {
   }
 
   async function toggleActive(user: AdminUser) {
+    const actionSource = pageSource;
+    setUserBusy(user.id, "status");
+    setMessage("");
     try {
       await patchAdminUserStatus({
-        data: { source, id: user.id, active: !user.active },
+        data: { source: actionSource, id: user.id, active: !user.active },
       });
-      await load(pageData.page);
+      await load(pageData.page, actionSource);
+      setMessage(`Status atualizado para ${user.email ?? user.id}.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearUserBusy(user.id);
     }
   }
 
   async function makeAdmin(user: AdminUser) {
+    const actionSource = pageSource;
     const nextRole = roleDraftByUser[user.id] ?? user.role;
+    setUserBusy(user.id, "role");
+    setMessage("");
     try {
       await patchAdminUserRole({
-        data: { source, id: user.id, role: nextRole },
+        data: { source: actionSource, id: user.id, role: nextRole },
       });
-      await load(pageData.page);
+      await load(pageData.page, actionSource);
+      setMessage(`Role atualizada para ${user.email ?? user.id}.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearUserBusy(user.id);
     }
   }
 
   async function softDelete(user: AdminUser) {
+    const actionSource = pageSource;
     const ok = confirm(`Soft delete do usuário ${user.email ?? user.id}?`);
     if (!ok) return;
+    setUserBusy(user.id, "delete");
+    setMessage("");
     try {
-      await deleteAdminUser({ data: { source, id: user.id } });
-      await load(pageData.page);
+      await deleteAdminUser({ data: { source: actionSource, id: user.id } });
+      await load(pageData.page, actionSource);
+      setMessage(`Usuário ${user.email ?? user.id} removido (soft delete).`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearUserBusy(user.id);
     }
   }
 
   async function viewAssets(user: AdminUser) {
+    const actionSource = pageSource;
+    setUserBusy(user.id, "assets");
+    setMessage("");
     try {
       const items = (await fetchAdminUserAssets({
-        data: { source, id: user.id },
+        data: { source: actionSource, id: user.id },
       })) as AdminUserAsset[];
       setAssets(items);
       setMessage(items.length ? "" : "Sem assets para este usuário.");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
       setAssets([]);
+    } finally {
+      clearUserBusy(user.id);
     }
   }
 
@@ -104,7 +144,9 @@ function AdminPage() {
   const rolePermissionsBySlug = new Map(roles.map((r) => [r.value, r.permissions ?? []]));
 
   useEffect(() => {
-    void load(1);
+    setPageData({ items: [], page: 1, limit: 20, total: 0 });
+    setAssets(null);
+    void load(1, source);
     void (async () => {
       try {
         const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
@@ -126,6 +168,8 @@ function AdminPage() {
     for (const u of pageData.items) next[u.id] = u.role;
     setRoleDraftByUser(next);
   }, [pageData.items]);
+
+  const sourceSwitching = source !== pageSource;
 
   return (
     <div className="space-y-6 p-6">
@@ -224,10 +268,20 @@ function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs">{u.createdAt ? u.createdAt.slice(0, 10) : "—"}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
+                    {busyActionByUser[u.id] ? (
+                      <span className="inline-flex items-center rounded border border-primary/50 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
+                        processando...
+                      </span>
+                    ) : sourceSwitching ? (
+                      <span className="inline-flex items-center rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        trocando origem...
+                      </span>
+                    ) : null}
                     <select
                       className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
                       value={roleDraftByUser[u.id] ?? u.role}
                       title={(rolePermissionsBySlug.get(roleDraftByUser[u.id] ?? u.role) ?? []).join(", ")}
+                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                       onChange={(e) =>
                         setRoleDraftByUser((prev) => ({
                           ...prev,
@@ -251,26 +305,34 @@ function AdminPage() {
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => makeAdmin(u)}
+                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                     >
-                      salvar role
+                      {busyActionByUser[u.id] === "role" ? "salvando..." : "salvar role"}
                     </button>
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => toggleActive(u)}
+                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                     >
-                      {u.active ? "desativar" : "ativar"}
+                      {busyActionByUser[u.id] === "status"
+                        ? "salvando..."
+                        : u.active
+                          ? "desativar"
+                          : "ativar"}
                     </button>
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => viewAssets(u)}
+                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                     >
-                      assets
+                      {busyActionByUser[u.id] === "assets" ? "carregando..." : "assets"}
                     </button>
                     <button
                       className="rounded border border-chart-3/60 px-2 py-1 font-mono text-[10px] text-chart-3 hover:bg-chart-3/10"
                       onClick={() => softDelete(u)}
+                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                     >
-                      soft delete
+                      {busyActionByUser[u.id] === "delete" ? "removendo..." : "soft delete"}
                     </button>
                   </div>
                 </td>

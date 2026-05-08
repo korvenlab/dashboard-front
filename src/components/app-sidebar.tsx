@@ -99,6 +99,7 @@ export function AppSidebar({ dynamicItems, onLogout }: Props) {
                         <Link
                           to={item.url}
                           search={search}
+                          preload="intent"
                           className="font-mono text-xs uppercase tracking-wider"
                         >
                           <item.icon className="h-4 w-4" />

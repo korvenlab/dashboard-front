@@ -151,6 +151,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   validateSearch: (search) => parseRootSearch(search as Record<string, unknown>),
   loaderDeps: ({ search }) => ({ search }),
+  staleTime: 30_000,
   loader: async ({ deps }): Promise<RootLoaderData> => {
     const { organization_id, period_days, chart_days } = deps.search;
 

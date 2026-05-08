@@ -36,26 +36,32 @@ export function EventsTable({ events }: { events: AppEvent[] }) {
         <div className="font-mono text-[10px] uppercase tracking-widest neon-text">live</div>
       </div>
       <div className="divide-y divide-border">
-        {events.map((e) => (
-          <div
-            key={e.id}
-            className={cn(
-              "grid grid-cols-12 items-center gap-3 px-5 py-3 text-sm",
-              "hover:bg-muted/40"
-            )}
-          >
-            <div className="col-span-2 font-mono text-[11px] tracking-wider text-muted-foreground">
-              {e.timestamp}
+        {events.length ? (
+          events.map((e) => (
+            <div
+              key={e.id}
+              className={cn(
+                "grid grid-cols-12 items-center gap-3 px-5 py-3 text-sm",
+                "hover:bg-muted/40"
+              )}
+            >
+              <div className="col-span-2 font-mono text-[11px] tracking-wider text-muted-foreground">
+                {e.timestamp}
+              </div>
+              <div className="col-span-2 font-mono text-[11px] uppercase tracking-widest text-foreground">
+                {e.app}
+              </div>
+              <div className="col-span-2"><StatusBadge status={e.status} /></div>
+              <div className="col-span-6 font-mono text-xs text-muted-foreground">
+                {e.message}
+              </div>
             </div>
-            <div className="col-span-2 font-mono text-[11px] uppercase tracking-widest text-foreground">
-              {e.app}
-            </div>
-            <div className="col-span-2"><StatusBadge status={e.status} /></div>
-            <div className="col-span-6 font-mono text-xs text-muted-foreground">
-              {e.message}
-            </div>
+          ))
+        ) : (
+          <div className="px-5 py-8 text-center font-mono text-xs text-muted-foreground">
+            Nenhum evento encontrado para este filtro.
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

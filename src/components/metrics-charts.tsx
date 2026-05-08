@@ -21,6 +21,7 @@ const tooltipStyle = {
 
 export function RevenueAreaChart({ data, chartDays }: { data: ChartPointReceita[]; chartDays?: number }) {
   const days = chartDays ?? (data.length > 0 ? data.length : 14);
+  const hasData = data.length > 0;
   return (
     <div className="border border-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between">
@@ -33,20 +34,26 @@ export function RevenueAreaChart({ data, chartDays }: { data: ChartPointReceita[
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{days}d</div>
       </div>
       <div className="h-72 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <defs>
-              <linearGradient id="grad-receita" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--neon-white)" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="var(--neon-white)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="t" stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-            <YAxis stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "var(--neon-white)", strokeWidth: 1, strokeDasharray: "2 2" }} />
-            <Area type="monotone" dataKey="receita" stroke="var(--neon-white)" strokeWidth={1.5} fill="url(#grad-receita)" />
-          </AreaChart>
-        </ResponsiveContainer>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="grad-receita" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--neon-white)" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="var(--neon-white)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="t" stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+              <YAxis stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "var(--neon-white)", strokeWidth: 1, strokeDasharray: "2 2" }} />
+              <Area type="monotone" dataKey="receita" stroke="var(--neon-white)" strokeWidth={1.5} fill="url(#grad-receita)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center border border-dashed border-border/60 bg-background/30 font-mono text-xs text-muted-foreground">
+            Sem pontos de receita para o período selecionado.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -54,6 +61,7 @@ export function RevenueAreaChart({ data, chartDays }: { data: ChartPointReceita[
 
 export function VolumeBarChart({ data, chartDays }: { data: ChartPointVolume[]; chartDays?: number }) {
   const days = chartDays ?? (data.length > 0 ? data.length : 14);
+  const hasData = data.length > 0;
   return (
     <div className="border border-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between">
@@ -66,14 +74,20 @@ export function VolumeBarChart({ data, chartDays }: { data: ChartPointVolume[]; 
         <div className="font-mono text-[10px] uppercase tracking-widest text-foreground/80">{days}d</div>
       </div>
       <div className="h-72 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <XAxis dataKey="t" stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-            <YAxis stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={false} />
-            <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "color-mix(in oklab, var(--neon-white) 6%, transparent)" }} />
-            <Bar dataKey="volume" fill="var(--neon-white)" />
-          </BarChart>
-        </ResponsiveContainer>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <XAxis dataKey="t" stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+              <YAxis stroke="var(--muted-foreground)" tick={{ fontFamily: "var(--font-mono)", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "color-mix(in oklab, var(--neon-white) 6%, transparent)" }} />
+              <Bar dataKey="volume" fill="var(--neon-white)" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center border border-dashed border-border/60 bg-background/30 font-mono text-xs text-muted-foreground">
+            Sem pontos de volume para o período selecionado.
+          </div>
+        )}
       </div>
     </div>
   );
