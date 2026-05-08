@@ -9,14 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AvendasRouteImport } from './routes/avendas'
 import { Route as WagooRouteImport } from './routes/wagoo'
+import { Route as MonitoramentoRouteImport } from './routes/monitoramento'
+import { Route as AvendasRouteImport } from './routes/avendas'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const WagooRoute = WagooRouteImport.update({
+  id: '/wagoo',
+  path: '/wagoo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonitoramentoRoute = MonitoramentoRouteImport.update({
+  id: '/monitoramento',
+  path: '/monitoramento',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AvendasRoute = AvendasRouteImport.update({
@@ -24,9 +30,9 @@ const AvendasRoute = AvendasRouteImport.update({
   path: '/avendas',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WagooRoute = WagooRouteImport.update({
-  id: '/wagoo',
-  path: '/wagoo',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -36,46 +42,57 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
+  '/monitoramento': typeof MonitoramentoRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesByTo {
-  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
+  '/monitoramento': typeof MonitoramentoRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/admin': typeof AdminRoute
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
+  '/monitoramento': typeof MonitoramentoRoute
   '/wagoo': typeof WagooRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/admin' | '/' | '/avendas' | '/wagoo'
+  fullPaths: '/' | '/admin' | '/avendas' | '/monitoramento' | '/wagoo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/admin' | '/' | '/avendas' | '/wagoo'
-  id: '__root__' | '/admin' | '/' | '/avendas' | '/wagoo'
+  to: '/' | '/admin' | '/avendas' | '/monitoramento' | '/wagoo'
+  id: '__root__' | '/' | '/admin' | '/avendas' | '/monitoramento' | '/wagoo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AdminRoute: typeof AdminRoute
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AvendasRoute: typeof AvendasRoute
+  MonitoramentoRoute: typeof MonitoramentoRoute
   WagooRoute: typeof WagooRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
+    '/wagoo': {
+      id: '/wagoo'
+      path: '/wagoo'
+      fullPath: '/wagoo'
+      preLoaderRoute: typeof WagooRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monitoramento': {
+      id: '/monitoramento'
+      path: '/monitoramento'
+      fullPath: '/monitoramento'
+      preLoaderRoute: typeof MonitoramentoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/avendas': {
@@ -85,11 +102,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AvendasRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/wagoo': {
-      id: '/wagoo'
-      path: '/wagoo'
-      fullPath: '/wagoo'
-      preLoaderRoute: typeof WagooRouteImport
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -103,11 +120,22 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  AdminRoute: AdminRoute,
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AvendasRoute: AvendasRoute,
+  MonitoramentoRoute: MonitoramentoRoute,
   WagooRoute: WagooRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

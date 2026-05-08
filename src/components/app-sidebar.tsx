@@ -1,5 +1,5 @@
 import { Link, useRouterState, useSearch } from "@tanstack/react-router";
-import { LayoutDashboard, Boxes, ShoppingCart, ShieldUser, Wrench, LogOut, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Boxes, ShoppingCart, ShieldUser, Activity, Wrench, LogOut, type LucideIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,10 +15,10 @@ import {
 import type { UiSidebarItem } from "@/lib/dashboard-view";
 import type { RootSearch } from "@/lib/root-search";
 
-type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin";
+type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin" | "/monitoramento";
 
 function isDashboardHref(url: string): url is DashboardHref {
-  return url === "/" || url === "/wagoo" || url === "/avendas" || url === "/admin";
+  return url === "/" || url === "/wagoo" || url === "/avendas" || url === "/admin" || url === "/monitoramento";
 }
 
 const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
@@ -26,6 +26,7 @@ const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Wagoo", url: "/wagoo", icon: Boxes },
   { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
   { title: "Admin", url: "/admin", icon: ShieldUser },
+  { title: "Monitoramento", url: "/monitoramento", icon: Activity },
 ];
 
 function iconFromHint(hint?: string): LucideIcon {

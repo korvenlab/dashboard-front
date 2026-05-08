@@ -32,7 +32,7 @@ function WagooPage() {
       <div>
         <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Wagoo</h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Assinaturas e receita — série `wagoo.receita_por_dia` da API /dashboard.
+          Usuários ativos e receita atual — série `wagoo.receita_por_dia` da API /dashboard.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

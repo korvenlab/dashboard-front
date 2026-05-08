@@ -32,7 +32,7 @@ function AvendasPage() {
       <div>
         <h1 className="font-mono text-xl font-semibold tracking-[0.15em]">2AVendas</h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Volume de vendas — série `dois_avendas.volume_por_dia` da API /dashboard.
+          Desempenho de cadastro de clientes — série `dois_avendas.volume_por_dia` da API /dashboard.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

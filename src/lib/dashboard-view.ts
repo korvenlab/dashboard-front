@@ -65,6 +65,20 @@ function metricDelta(obj: Record<string, unknown>, key: string): { pct: number |
   return { pct };
 }
 
+function pickMetric(
+  obj: Record<string, unknown>,
+  keys: string[],
+): { value: number | undefined; pct: number | undefined } {
+  for (const key of keys) {
+    const value = metricNumber(obj, key);
+    if (value !== undefined) {
+      const { pct } = metricDelta(obj, key);
+      return { value, pct };
+    }
+  }
+  return { value: undefined, pct: undefined };
+}
+
 function formatDayLabel(isoOrDay: string): string {
   const s = isoOrDay.trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(5, 10);
@@ -118,22 +132,32 @@ function parseKpis(raw: unknown): Kpi[] | undefined {
   const obj = record(raw);
   if (!obj) return undefined;
 
-  const pairs: { key: string; label: string }[] = [
-    { key: "receita_total", label: "Receita Total" },
-    { key: "assinaturas_ativas_wagoo", label: "Assinaturas Ativas (Wagoo)" },
-    { key: "volume_vendas_2avendas", label: "Volume de Vendas (2AVendas)" },
-    { key: "uptime_medio", label: "Uptime Médio" },
+  const cardsConfig: {
+    keys: string[];
+    label: string;
+    formatter: "currency" | "number" | "percent";
+  }[] = [
+    { keys: ["receita_total"], label: "Receita Atual", formatter: "currency" },
+    {
+      keys: ["usuarios_ativos_wagoo", "usuarios_ativos", "assinaturas_ativas_wagoo"],
+      label: "Usuários Ativos (Wagoo)",
+      formatter: "number",
+    },
+    {
+      keys: ["cadastros_clientes_2avendas", "cadastro_clientes_2avendas", "volume_vendas_2avendas"],
+      label: "Cadastro de Clientes (2AVendas)",
+      formatter: "number",
+    },
+    { keys: ["uptime_medio"], label: "Uptime Médio", formatter: "percent" },
   ];
 
   const cards: Kpi[] = [];
-  for (const { key, label } of pairs) {
-    const value = metricNumber(obj, key);
+  for (const { keys, label, formatter } of cardsConfig) {
+    const { value, pct } = pickMetric(obj, keys);
     if (value === undefined) continue;
-    const { pct } = metricDelta(obj, key);
-    const isUptime = key === "uptime_medio";
-    const valueStr = isUptime ? formatPercent(value) : formatBrl(value);
-    const deltaStr =
-      pct !== undefined ? `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%` : isUptime ? "—" : "—";
+    const valueStr =
+      formatter === "percent" ? formatPercent(value) : formatter === "number" ? formatInt(value) : formatBrl(value);
+    const deltaStr = pct !== undefined ? `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%` : "—";
     const trend: Kpi["trend"] = pct === undefined ? "up" : pct >= 0 ? "up" : "down";
     cards.push({ label, value: valueStr, delta: deltaStr, trend });
   }
@@ -222,6 +246,10 @@ export function formatBrl(n: number): string {
 
 export function formatPercent(n: number): string {
   return `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+}
+
+export function formatInt(n: number): string {
+  return Math.round(n).toLocaleString("pt-BR");
 }
 
 export function buildFallbackDashboardViewModel(
@@ -349,11 +377,18 @@ export function mergeDualDashboardViewModels(
   const receita =
     wagoo?.kpis.find((k) => k.label.toLowerCase().includes("receita")) ??
     avendas?.kpis.find((k) => k.label.toLowerCase().includes("receita"));
-  const assinaturas = wagoo?.kpis.find(
-    (k) => k.label.toLowerCase().includes("wagoo") || k.label.toLowerCase().includes("assinatura"),
+  const usuariosWagoo = wagoo?.kpis.find(
+    (k) =>
+      k.label.toLowerCase().includes("wagoo") ||
+      k.label.toLowerCase().includes("usuário") ||
+      k.label.toLowerCase().includes("assinatura"),
   );
-  const volume = avendas?.kpis.find(
-    (k) => k.label.toLowerCase().includes("2avendas") || k.label.toLowerCase().includes("volume"),
+  const cadastroClientes = avendas?.kpis.find(
+    (k) =>
+      k.label.toLowerCase().includes("2avendas") ||
+      k.label.toLowerCase().includes("cadastro") ||
+      k.label.toLowerCase().includes("cliente") ||
+      k.label.toLowerCase().includes("volume"),
   );
   const uptime =
     wagoo?.kpis.find((k) => k.label.toLowerCase().includes("uptime")) ??
@@ -361,8 +396,8 @@ export function mergeDualDashboardViewModels(
 
   const mergedKpis: Kpi[] = [];
   if (receita) mergedKpis.push(receita);
-  if (assinaturas) mergedKpis.push(assinaturas);
-  if (volume) mergedKpis.push(volume);
+  if (usuariosWagoo) mergedKpis.push(usuariosWagoo);
+  if (cadastroClientes) mergedKpis.push(cadastroClientes);
   if (uptime) mergedKpis.push(uptime);
 
   const kpisFinal = mergedKpis.length ? mergedKpis : fb.kpis;
