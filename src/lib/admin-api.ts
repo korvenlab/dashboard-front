@@ -392,7 +392,7 @@ export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
       data.source,
       "PATCH",
       `/api/admin/users/${encodeURIComponent(data.id)}/has-paid`,
-      { hasPaid: data.hasPaid },
+      { hasPaid: data.hasPaid, has_paid: data.hasPaid },
     );
     const root = asRecord(raw);
     const payload = asRecord(root?.data);
