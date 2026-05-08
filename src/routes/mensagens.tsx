@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
+  deleteTwoAvendasFeedbackMessage,
   fetchTwoAvendasFeedbackMessages,
   type FeedbackMessageRow,
 } from "@/lib/two-avendas-feedback-api";
@@ -17,6 +18,7 @@ function MensagensPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<FeedbackMessageRow[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -35,6 +37,21 @@ function MensagensPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function removeMessage(m: FeedbackMessageRow) {
+    const ok = confirm("Apagar esta mensagem permanentemente?");
+    if (!ok) return;
+    setDeletingId(m.id);
+    setError("");
+    try {
+      await deleteTwoAvendasFeedbackMessage({ data: { id: m.id } });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="space-y-8 p-10">
@@ -69,8 +86,18 @@ function MensagensPage() {
                   <div className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                     {format(new Date(m.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                   </div>
-                  <div className="font-mono text-[10px] text-muted-foreground truncate max-w-[50%]">
-                    org {m.organization_id ?? "—"}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-mono text-[10px] text-muted-foreground truncate max-w-[50%]">
+                      org {m.organization_id ?? "—"}
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded border border-chart-3/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-chart-3 hover:bg-chart-3/10 disabled:opacity-50"
+                      disabled={Boolean(deletingId)}
+                      onClick={() => void removeMessage(m)}
+                    >
+                      {deletingId === m.id ? "apagando…" : "apagar"}
+                    </button>
                   </div>
                 </div>
                 <div className="mt-2 font-mono text-xs text-foreground">

@@ -104,16 +104,18 @@ function AdminPage() {
     }
   }
 
-  async function softDelete(user: AdminUser) {
+  async function permanentlyDeleteAccount(user: AdminUser) {
     const actionSource = pageSource;
-    const ok = confirm(`Soft delete do usuário ${user.email ?? user.id}?`);
+    const ok = confirm(
+      `Apagar a conta ${user.email ?? user.id} permanentemente do banco e da autenticação? Esta ação não pode ser desfeita.`,
+    );
     if (!ok) return;
     setUserBusy(user.id, "delete");
     setMessage("");
     try {
       await deleteAdminUser({ data: { source: actionSource, id: user.id } });
       await load(pageData.page, actionSource);
-      setMessage(`Usuário ${user.email ?? user.id} removido (soft delete).`);
+      setMessage(`Conta ${user.email ?? user.id} removida permanentemente.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -177,6 +179,10 @@ function AdminPage() {
         <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Admin Console</h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
           Gerenciamento de usuários por app (Wagoo e 2AVendas), usando APIs admin server-side.
+        </p>
+        <p className="mt-2 max-w-3xl font-mono text-[11px] leading-relaxed text-muted-foreground">
+          Nas duas origens o contrato é o mesmo: desativar só corta o acesso (sem marcar exclusão lógica);
+          apagar conta remove o usuário em Supabase Auth e o que o banco apagar em cascata (wag-backend e 2A-back).
         </p>
       </div>
 
@@ -329,10 +335,10 @@ function AdminPage() {
                     </button>
                     <button
                       className="rounded border border-chart-3/60 px-2 py-1 font-mono text-[10px] text-chart-3 hover:bg-chart-3/10"
-                      onClick={() => softDelete(u)}
+                      onClick={() => permanentlyDeleteAccount(u)}
                       disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                     >
-                      {busyActionByUser[u.id] === "delete" ? "removendo..." : "soft delete"}
+                      {busyActionByUser[u.id] === "delete" ? "apagando..." : "apagar conta"}
                     </button>
                   </div>
                 </td>

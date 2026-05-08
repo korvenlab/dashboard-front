@@ -20,6 +20,8 @@ function asArray(v: unknown): unknown[] {
   return Array.isArray(v) ? v : [];
 }
 
+const feedbackMessageIdSchema = z.object({ id: z.string().uuid() });
+
 function parseRow(raw: unknown): FeedbackMessageRow | null {
   const r = asRecord(raw);
   const id = typeof r.id === "string" ? r.id : null;
@@ -93,3 +95,56 @@ export const fetchTwoAvendasFeedbackMessages = createServerFn({ method: "GET" })
     }
     return rows;
   });
+
+/**
+ * Remove uma linha de `feedback_messages` (mesma API key que `/metrics`).
+ */
+export const deleteTwoAvendasFeedbackMessage = createServerFn({ method: "POST" })
+  .inputValidator(feedbackMessageIdSchema)
+  .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
+    const { data } = ctx as { data: z.infer<typeof feedbackMessageIdSchema> };
+    const env = getTwoAvendasServerEnv();
+    const base = env.apiBaseUrl?.trim();
+    const key = env.metricsApiKey?.trim();
+    if (!base) {
+      throw new Error(
+        "Configure TWO_AVENDAS_API_BASE_URL no servidor do dashboard para apagar mensagens.",
+      );
+    }
+    if (!key) {
+      throw new Error(
+        "Configure TWO_AVENDAS_METRICS_API_KEY no servidor (mesma chave do 2A-back /metrics).",
+      );
+    }
+
+    const url = `${base.replace(/\/+$/, "")}/feedback/messages/${encodeURIComponent(data.id)}`;
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${key}`,
+        "X-API-Key": key,
+      },
+    });
+
+    const text = await res.text();
+    let json: unknown = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = {};
+    }
+
+    const root = asRecord(json);
+    if (!res.ok || root.ok === false) {
+      const msg =
+        typeof root.error === "string"
+          ? root.error
+          : `Falha ao apagar mensagem (HTTP ${res.status}).`;
+      throw new Error(msg);
+    }
+
+    const out = asRecord(root.data);
+    const deleted = typeof out?.deleted === "boolean" ? out.deleted : true;
+    return { id: typeof out?.id === "string" ? out.id : data.id, deleted };
+  }) as any);
