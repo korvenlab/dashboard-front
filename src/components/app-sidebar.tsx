@@ -1,5 +1,15 @@
 import { Link, useRouterState, useSearch } from "@tanstack/react-router";
-import { LayoutDashboard, Boxes, ShoppingCart, ShieldUser, Activity, Wrench, LogOut, type LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  Boxes,
+  ShoppingCart,
+  ShieldUser,
+  Activity,
+  MessageSquare,
+  Wrench,
+  LogOut,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,10 +25,17 @@ import {
 import type { UiSidebarItem } from "@/lib/dashboard-view";
 import type { RootSearch } from "@/lib/root-search";
 
-type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin" | "/monitoramento";
+type DashboardHref = "/" | "/wagoo" | "/avendas" | "/admin" | "/monitoramento" | "/mensagens";
 
 function isDashboardHref(url: string): url is DashboardHref {
-  return url === "/" || url === "/wagoo" || url === "/avendas" || url === "/admin" || url === "/monitoramento";
+  return (
+    url === "/" ||
+    url === "/wagoo" ||
+    url === "/avendas" ||
+    url === "/admin" ||
+    url === "/monitoramento" ||
+    url === "/mensagens"
+  );
 }
 
 const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
@@ -27,11 +44,13 @@ const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
   { title: "Admin", url: "/admin", icon: ShieldUser },
   { title: "Monitoramento", url: "/monitoramento", icon: Activity },
+  { title: "Mensagens", url: "/mensagens", icon: MessageSquare },
 ];
 
 function iconFromHint(hint?: string): LucideIcon {
   const h = (hint ?? "").toLowerCase();
   if (h.includes("wagoo") || h.includes("box")) return Boxes;
+  if (h.includes("message") || h.includes("mensagem") || h.includes("feedback")) return MessageSquare;
   if (h.includes("vend") || h.includes("cart") || h.includes("shop")) return ShoppingCart;
   if (h.includes("setting") || h.includes("config")) return Wrench;
   if (h.includes("dash") || h.includes("home")) return LayoutDashboard;
@@ -49,6 +68,9 @@ function mapDynamic(items: UiSidebarItem[]): { title: string; url: string; icon:
   }
   if (!mapped.some((it) => it.url === "/monitoramento")) {
     mapped.push({ title: "Monitoramento", url: "/monitoramento", icon: Activity });
+  }
+  if (!mapped.some((it) => it.url === "/mensagens")) {
+    mapped.push({ title: "Mensagens", url: "/mensagens", icon: MessageSquare });
   }
   return mapped;
 }

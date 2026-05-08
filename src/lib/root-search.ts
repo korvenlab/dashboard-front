@@ -34,4 +34,4 @@ export function parseRootSearch(search: Record<string, unknown>): RootSearch {
   return { ...base, organization_id };
 }
 
-export const dashboardPaths = new Set(["/", "/wagoo", "/avendas"]);
+export const dashboardPaths = new Set(["/", "/wagoo", "/avendas", "/mensagens"]);
