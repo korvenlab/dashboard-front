@@ -143,15 +143,18 @@ function isAdminRoleOption(v: unknown): v is AdminRoleOption {
   return typeof r.value === "string" && typeof r.label === "string";
 }
 
-/** Aceita boolean, 0/1, strings comuns e valores vindos do Postgres via JSON. */
+/** Aceita boolean, 0/1, bigint, texto PT/EN e valores vindos do Postgres via JSON. */
 function coerceHasPaid(v: unknown): boolean | undefined {
   if (v === null || v === undefined) return undefined;
   if (typeof v === "boolean") return v;
+  if (typeof v === "bigint") return v !== 0n;
   if (typeof v === "number" && Number.isFinite(v)) return v !== 0;
   if (typeof v === "string") {
     const s = v.trim().toLowerCase();
-    if (["true", "1", "yes", "t"].includes(s)) return true;
-    if (["false", "0", "no", "f"].includes(s)) return false;
+    if (["true", "1", "yes", "t", "sim", "pago", "verdadeiro", "ligado", "ativo", "on"].includes(s))
+      return true;
+    if (["false", "0", "no", "f", "não", "nao", "falso", "desligado", "inativo", "off"].includes(s))
+      return false;
   }
   return undefined;
 }
@@ -165,13 +168,14 @@ function extractHasPaidFromUserPayload(raw: Record<string, unknown>): boolean | 
   const profilesArr = Array.isArray(raw.profiles) ? raw.profiles : null;
   const firstProfile = profilesArr?.length ? asRecord(profilesArr[0]) : undefined;
 
+  /** Preferir campos no topo da API Korven; `profile` aninhado por último (evita `false` obsoleto). */
   const candidates = [
     raw.hasPaid,
     raw.has_paid,
-    profile?.hasPaid,
-    profile?.has_paid,
     firstProfile?.hasPaid,
     firstProfile?.has_paid,
+    profile?.hasPaid,
+    profile?.has_paid,
   ];
 
   for (const c of candidates) {
@@ -181,12 +185,32 @@ function extractHasPaidFromUserPayload(raw: Record<string, unknown>): boolean | 
   return undefined;
 }
 
+function pickComplimentaryUntil(raw: Record<string, unknown>): string | null | undefined {
+  const v = raw.complimentary_access_until ?? raw.complimentaryAccessUntil;
+  if (v === null) return null;
+  if (v === undefined) return undefined;
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t.length ? t : null;
+  }
+  return undefined;
+}
+
+/** Mesma regra que o wag-backend (`profileHasWagooAccess`), recalculada no dashboard. */
+function computeWagooHasAccess(hasPaid: boolean | undefined, until: string | null | undefined): boolean {
+  if (hasPaid === true) return true;
+  if (!until || typeof until !== "string") return false;
+  const t = new Date(until).getTime();
+  return Number.isFinite(t) && t > Date.now();
+}
+
 function normalizeUser(raw: unknown): AdminUser | null {
   const r = asRecord(raw);
   if (!r) return null;
   const id = asString(r.id);
   if (!id) return null;
   const hasPaid = extractHasPaidFromUserPayload(r);
+  const untilPick = pickComplimentaryUntil(r);
   const out: AdminUser = {
     id,
     email: asString(r.email),
@@ -197,10 +221,9 @@ function normalizeUser(raw: unknown): AdminUser | null {
     lastSignInAt: asString(r.lastSignInAt) ?? asString(r.last_sign_in_at),
   };
   if (hasPaid !== undefined) out.hasPaid = hasPaid;
-  if (typeof r.hasAccess === "boolean") out.hasAccess = r.hasAccess;
-  if (typeof r.complimentary_access_until === "string")
-    out.complimentary_access_until = r.complimentary_access_until;
+  if (untilPick !== undefined) out.complimentary_access_until = untilPick;
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
+  out.hasAccess = computeWagooHasAccess(out.hasPaid, out.complimentary_access_until);
   return out;
 }
 
