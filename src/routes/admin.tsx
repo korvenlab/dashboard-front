@@ -8,6 +8,8 @@ import {
   patchAdminUserRole,
   patchAdminUserStatus,
   patchWagooUserComplimentaryAccess,
+  wagooComplimentaryIsActive,
+  wagooFormatComplimentaryRemaining,
   type AdminRoleOption,
   type AdminRolesResult,
   type AdminSource,
@@ -29,21 +31,23 @@ const WAGOO_COMPLIMENTARY_PRESETS = [
   { value: "365", label: "+365 dias" },
 ] as const;
 
-function complimentaryIsActive(until: string | null | undefined): boolean {
-  if (!until || typeof until !== "string") return false;
-  const t = new Date(until).getTime();
-  return Number.isFinite(t) && t > Date.now();
-}
-
-function formatComplimentaryRemaining(until: string | null | undefined): string {
-  if (!complimentaryIsActive(until)) return "—";
-  const ms = new Date(until!).getTime() - Date.now();
-  const d = Math.floor(ms / 86_400_000);
-  const h = Math.floor((ms % 86_400_000) / 3_600_000);
-  if (d > 0) return `${d}d ${h}h`;
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  if (h > 0) return `${h}h ${m}min`;
-  return `${Math.max(0, m)} min`;
+function WagooComplimentaryUntilCell({ until }: { until: string | null | undefined }) {
+  if (!until) return "—";
+  const ms = new Date(String(until)).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  const label = new Date(ms).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+  const active = wagooComplimentaryIsActive(until);
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span>{label}</span>
+      <span className={active ? "text-emerald-400/90" : "text-rose-400/90"}>
+        {active ? "cortesia activa" : "cortesia expirada"}
+      </span>
+    </span>
+  );
 }
 
 function stringifyUnknown(e: unknown): string {
@@ -156,13 +160,19 @@ function AdminPage() {
     setUserBusy(user.id, "complimentary");
     setMessage("");
     try {
-      await patchWagooUserComplimentaryAccess({
+      const updated = (await patchWagooUserComplimentaryAccess({
         data: {
           source: "wagoo",
           id: user.id,
           preset: preset as "none" | "7" | "30" | "60" | "90" | "180" | "365",
         },
-      });
+      })) as AdminUser | null;
+      if (updated?.id) {
+        setPageData((prev) => ({
+          ...prev,
+          items: prev.items.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+        }));
+      }
       await load(pageData.page, "wagoo");
       setMessage(`Cortesia atualizada: ${user.email ?? user.id}.`);
     } catch (e) {
@@ -403,12 +413,7 @@ function AdminPage() {
                       )}
                     </td>
                     <td className="max-w-[140px] px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      {complimentaryIsActive(u.complimentary_access_until) && u.complimentary_access_until
-                        ? new Date(u.complimentary_access_until).toLocaleString("pt-BR", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })
-                        : "—"}
+                      <WagooComplimentaryUntilCell until={u.complimentary_access_until} />
                     </td>
                     <td className="max-w-[220px] px-3 py-2 align-top">
                       <span
@@ -419,7 +424,7 @@ function AdminPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      {formatComplimentaryRemaining(u.complimentary_access_until)}
+                      {wagooFormatComplimentaryRemaining(u.complimentary_access_until)}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col gap-1">

@@ -226,24 +226,34 @@ function complimentaryUntilToMillis(until: unknown): number | null {
   return null;
 }
 
-/** Aceita boolean, 0/1 e strings; usado para `hasAccess` / `has_access` vindos de JSON heterogéneo. */
-function coerceOptionalBoolean(v: unknown): boolean | undefined {
-  if (v === null || v === undefined) return undefined;
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number" && Number.isFinite(v)) return v !== 0;
-  if (typeof v === "string") {
-    const s = v.trim().toLowerCase();
-    if (["true", "1", "yes", "t", "sim", "on", "ligado", "ativo"].includes(s)) return true;
-    if (["false", "0", "no", "f", "não", "nao", "off", "desligado", "inativo"].includes(s)) return false;
-  }
-  return undefined;
-}
-
 /** Mesma regra que o wag-backend (`profileHasWagooAccess`), recalculada no dashboard. */
 function computeWagooHasAccess(hasPaid: boolean | undefined, until: unknown): boolean {
   if (hasPaid === true) return true;
   const ms = complimentaryUntilToMillis(until);
   return ms != null && ms > Date.now();
+}
+
+/**
+ * Cortesia ainda válida (mesma lógica que `profileAccess.ts` no wag-backend).
+ * Exportado para a UI do admin usar exactamente o mesmo critério que `hasAccess`.
+ */
+export function wagooComplimentaryIsActive(until: unknown): boolean {
+  const ms = complimentaryUntilToMillis(until);
+  return ms != null && ms > Date.now();
+}
+
+/** Tempo restante até `complimentary_access_until` (rótulo curto). */
+export function wagooFormatComplimentaryRemaining(until: unknown): string {
+  if (!wagooComplimentaryIsActive(until)) return "—";
+  const ms = complimentaryUntilToMillis(until);
+  if (ms == null) return "—";
+  const left = ms - Date.now();
+  const d = Math.floor(left / 86_400_000);
+  const h = Math.floor((left % 86_400_000) / 3_600_000);
+  if (d > 0) return `${d}d ${h}h`;
+  const m = Math.floor((left % 3_600_000) / 60_000);
+  if (h > 0) return `${h}h ${m}min`;
+  return `${Math.max(0, m)} min`;
 }
 
 function normalizeUser(raw: unknown): AdminUser | null {
@@ -267,20 +277,11 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
   if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
-  /** Preferir valor explícito do wag-backend; aceitar snake_case e tipos não estritamente boolean. */
-  const accessFromApi =
-    coerceOptionalBoolean(r.hasAccess) ?? coerceOptionalBoolean(r.has_access);
-  if (accessFromApi !== undefined) {
-    out.hasAccess = accessFromApi;
-  } else {
-    const untilRaw =
-      untilPick !== undefined
-        ? untilPick
-        : (r.complimentary_access_until ??
-            r.complimentaryAccessUntil ??
-            (asRecord(r.profile)?.complimentary_access_until as unknown));
-    out.hasAccess = computeWagooHasAccess(out.hasPaid, untilRaw);
-  }
+  /**
+   * Nunca confiar só em `hasAccess` da API: proxies/serialização podem desalinhar.
+   * Recalcular sempre a partir de `has_paid` + `complimentary_access_until` (igual ao app).
+   */
+  out.hasAccess = computeWagooHasAccess(out.hasPaid, untilPick);
   return out;
 }
 
@@ -338,10 +339,16 @@ async function callAdminApi(
     throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
   const url = new URL(`${resolveAdminApiBaseUrl(base, source)}${path}`);
+  /** Evita resposta GET em cache (lista admin desactualizada após alterações). */
+  if (method === "GET") {
+    url.searchParams.set("_ts", String(Date.now()));
+  }
   const res = await fetch(url.toString(), {
     method,
+    cache: "no-store",
     headers: {
       Accept: "application/json",
+      ...(method === "GET" ? { "Cache-Control": "no-store", Pragma: "no-cache" } : {}),
       Authorization: `Bearer ${key}`,
       "X-API-Key": key,
       "x-admin-secret": key,
