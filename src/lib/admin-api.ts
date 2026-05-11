@@ -15,6 +15,8 @@ export type AdminUser = {
   /** Wagoo: acesso efetivo (Stripe ou cortesia). */
   hasAccess?: boolean;
   complimentary_access_until?: string | null;
+  /** Wagoo: existe resgate de link promocional (`wagoo_promo_redemptions`). */
+  complimentaryViaLink?: boolean;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -198,6 +200,7 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.hasAccess === "boolean") out.hasAccess = r.hasAccess;
   if (typeof r.complimentary_access_until === "string")
     out.complimentary_access_until = r.complimentary_access_until;
+  if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   return out;
 }
 
@@ -407,6 +410,27 @@ export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
     const root = asRecord(raw);
     const payload = asRecord(root?.data);
     return normalizeUser(payload ?? { id: data.id, hasPaid: data.hasPaid });
+  }) as any);
+
+const wagooComplimentaryAccessSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  preset: z.enum(["none", "7", "30", "60", "90", "180", "365"]),
+});
+
+/** Wagoo: PATCH cortesia administrativa (`complimentary_access_until`); não altera Stripe (`has_paid`). */
+export const patchWagooUserComplimentaryAccess = createServerFn({ method: "POST" })
+  .inputValidator(wagooComplimentaryAccessSchema)
+  .handler((async (ctx: unknown): Promise<AdminUser | null> => {
+    const { data } = ctx as { data: z.infer<typeof wagooComplimentaryAccessSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "PATCH",
+      `/api/admin/users/${encodeURIComponent(data.id)}/complimentary-access`,
+      { preset: data.preset },
+    );
+    const root = asRecord(raw);
+    return normalizeUser(root?.data ?? { id: data.id });
   }) as any);
 
 export type WagooPromoLink = {

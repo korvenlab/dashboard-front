@@ -5,9 +5,9 @@ import {
   fetchAdminUserAssets,
   fetchAdminRoles,
   fetchAdminUsers,
-  patchAdminUserHasPaid,
   patchAdminUserRole,
   patchAdminUserStatus,
+  patchWagooUserComplimentaryAccess,
   type AdminRoleOption,
   type AdminRolesResult,
   type AdminSource,
@@ -18,6 +18,39 @@ import {
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
+
+const WAGOO_COMPLIMENTARY_PRESETS = [
+  { value: "none", label: "Sem cortesia (revogar)" },
+  { value: "7", label: "+7 dias" },
+  { value: "30", label: "+30 dias" },
+  { value: "60", label: "+60 dias" },
+  { value: "90", label: "+90 dias" },
+  { value: "180", label: "+180 dias" },
+  { value: "365", label: "+365 dias" },
+] as const;
+
+function complimentaryIsActive(until: string | null | undefined): boolean {
+  if (!until || typeof until !== "string") return false;
+  const t = new Date(until).getTime();
+  return Number.isFinite(t) && t > Date.now();
+}
+
+function formatComplimentaryRemaining(until: string | null | undefined): string {
+  if (!complimentaryIsActive(until)) return "—";
+  const ms = new Date(until!).getTime() - Date.now();
+  const d = Math.floor(ms / 86_400_000);
+  const h = Math.floor((ms % 86_400_000) / 3_600_000);
+  if (d > 0) return `${d}d ${h}h`;
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  if (h > 0) return `${h}h ${m}min`;
+  return `${Math.max(0, m)} min`;
+}
+
+function complimentaryOriginLabel(u: AdminUser): string {
+  if (!complimentaryIsActive(u.complimentary_access_until)) return "—";
+  if (u.complimentaryViaLink) return "Link / convite";
+  return "Painel (admin)";
+}
 
 function stringifyUnknown(e: unknown): string {
   if (typeof e === "string") return e;
@@ -50,6 +83,7 @@ function AdminPage() {
   const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
   const [busyActionByUser, setBusyActionByUser] = useState<Record<string, string>>({});
+  const [complimentaryDraftByUser, setComplimentaryDraftByUser] = useState<Record<string, string>>({});
 
   function setUserBusy(userId: string, label: string) {
     setBusyActionByUser((prev) => ({ ...prev, [userId]: label }));
@@ -74,6 +108,7 @@ function AdminPage() {
       })) as { items: AdminUser[]; page: number; limit: number; total: number };
       setPageData(data);
       setPageSource(targetSource);
+      setComplimentaryDraftByUser({});
       setAssets(null);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -118,19 +153,24 @@ function AdminPage() {
     }
   }
 
-  async function setWagooPaid(user: AdminUser, hasPaid: boolean) {
-    setUserBusy(user.id, "hasPaid");
+  async function applyWagooComplimentary(user: AdminUser) {
+    const preset = complimentaryDraftByUser[user.id]?.trim();
+    if (!preset) {
+      setMessage("Escolha uma opção em «Ajustar cortesia» antes de aplicar.");
+      return;
+    }
+    setUserBusy(user.id, "complimentary");
     setMessage("");
     try {
-      await patchAdminUserHasPaid({
-        data: { source: "wagoo", id: user.id, hasPaid },
+      await patchWagooUserComplimentaryAccess({
+        data: {
+          source: "wagoo",
+          id: user.id,
+          preset: preset as "none" | "7" | "30" | "60" | "90" | "180" | "365",
+        },
       });
       await load(pageData.page, "wagoo");
-      setMessage(
-        hasPaid
-          ? `Marcado como pago: ${user.email ?? user.id}.`
-          : `Marcado como não pago: ${user.email ?? user.id}.`,
-      );
+      setMessage(`Cortesia atualizada: ${user.email ?? user.id}.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -221,6 +261,8 @@ function AdminPage() {
   }, [pageData.items]);
 
   const sourceSwitching = source !== pageSource;
+  const wagooTableColSpan = 11;
+  const avendasTableColSpan = 6;
 
   return (
     <div className="space-y-6 p-6">
@@ -257,11 +299,13 @@ function AdminPage() {
         </div>
         {source === "wagoo" ? (
           <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
-            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — pagamento</span>
+            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — acesso</span>
             <span className="mx-1.5 text-muted-foreground">·</span>
-            A coluna no banco é <code className="rounded bg-muted px-1 py-0.5 text-[10px]">profiles.has_paid</code>
-            (API devolve como <code className="rounded bg-muted px-1 py-0.5 text-[10px]">hasPaid</code>). A Stripe atualiza
-            esse campo via webhook. Os botões “marcar pago / não pago” chamam o wag-backend e gravam a mesma coluna.
+            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">Stripe</code> mostra{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">has_paid</code> (só leitura; webhook Stripe).
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> é efectivo (pago ou cortesia
+            activa). Use «Ajustar cortesia» para conceder dias ou revogar; quem já usou link de convite aparece em
+            Origem.
           </div>
         ) : null}
       </section>
@@ -298,14 +342,25 @@ function AdminPage() {
       ) : null}
 
       <section className="overflow-x-auto rounded border border-border">
-        <table className="w-full min-w-[900px] border-collapse">
+        <table
+          className={`w-full border-collapse ${pageSource === "wagoo" ? "min-w-[1180px]" : "min-w-[900px]"}`}
+        >
           <thead>
             <tr className="border-b border-border bg-card">
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Email</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Nome</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                {pageSource === "wagoo" ? "Pagamento (has_paid)" : "Role"}
-              </th>
+              {pageSource === "wagoo" ? (
+                <>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Stripe</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Acesso</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Cortesia até</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Origem</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Tempo restante</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ajustar cortesia</th>
+                </>
+              ) : (
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Role</th>
+              )}
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Status</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Criado</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ações</th>
@@ -316,27 +371,90 @@ function AdminPage() {
               <tr key={u.id} className="border-b border-border/50">
                 <td className="px-3 py-2 font-mono text-xs">{u.email ?? "—"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{u.name ?? "—"}</td>
-                <td className="px-3 py-2 font-mono text-xs">
-                  {pageSource === "wagoo" ? (
-                    typeof u.hasPaid === "boolean" ? (
-                      u.hasPaid ? (
-                        <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                          pago
-                        </span>
+                {pageSource === "wagoo" ? (
+                  <>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {typeof u.hasPaid === "boolean" ? (
+                        u.hasPaid ? (
+                          <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                            pago
+                          </span>
+                        ) : (
+                          <span className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+                            não pago
+                          </span>
+                        )
                       ) : (
-                        <span className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-amber-200">
-                          não pago
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )
-                  ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {typeof u.hasAccess === "boolean" ? (
+                        u.hasAccess ? (
+                          <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                            sim
+                          </span>
+                        ) : (
+                          <span className="rounded border border-rose-500/50 bg-rose-500/10 px-2 py-0.5 text-rose-300">
+                            não
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="max-w-[140px] px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      {complimentaryIsActive(u.complimentary_access_until) && u.complimentary_access_until
+                        ? new Date(u.complimentary_access_until).toLocaleString("pt-BR", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      {complimentaryOriginLabel(u)}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      {formatComplimentaryRemaining(u.complimentary_access_until)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col gap-1">
+                        <select
+                          className="h-7 max-w-[200px] rounded border border-border bg-card px-2 font-mono text-[10px]"
+                          value={complimentaryDraftByUser[u.id] ?? ""}
+                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
+                          onChange={(e) =>
+                            setComplimentaryDraftByUser((prev) => ({
+                              ...prev,
+                              [u.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">— escolher —</option>
+                          {WAGOO_COMPLIMENTARY_PRESETS.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="h-7 max-w-[200px] rounded border border-primary/50 px-2 font-mono text-[10px] text-primary hover:bg-primary/10"
+                          onClick={() => void applyWagooComplimentary(u)}
+                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
+                        >
+                          {busyActionByUser[u.id] === "complimentary" ? "aplicando…" : "Aplicar cortesia"}
+                        </button>
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <td className="px-3 py-2 font-mono text-xs">
                     <span className="rounded border border-border/70 bg-card px-2 py-0.5">
                       {roleLabelBySlug.get(u.role) ?? `Sem catálogo (${u.role})`}
                     </span>
-                  )}
-                </td>
+                  </td>
+                )}
                 <td className="px-3 py-2 font-mono text-xs">
                   {u.active ? (
                     <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
@@ -360,28 +478,7 @@ function AdminPage() {
                         trocando origem...
                       </span>
                     ) : null}
-                    {pageSource === "wagoo" ? (
-                      <>
-                        <button
-                          className="rounded border border-emerald-500/40 px-2 py-1 font-mono text-[10px] text-emerald-300 hover:bg-emerald-500/10"
-                          onClick={() => setWagooPaid(u, true)}
-                          disabled={
-                            Boolean(busyActionByUser[u.id]) || sourceSwitching || u.hasPaid === true
-                          }
-                        >
-                          {busyActionByUser[u.id] === "hasPaid" ? "salvando..." : "marcar pago"}
-                        </button>
-                        <button
-                          className="rounded border border-amber-500/40 px-2 py-1 font-mono text-[10px] text-amber-200 hover:bg-amber-500/10"
-                          onClick={() => setWagooPaid(u, false)}
-                          disabled={
-                            Boolean(busyActionByUser[u.id]) || sourceSwitching || u.hasPaid === false
-                          }
-                        >
-                          {busyActionByUser[u.id] === "hasPaid" ? "salvando..." : "marcar não pago"}
-                        </button>
-                      </>
-                    ) : (
+                    {pageSource === "2avendas" ? (
                       <>
                         <select
                           className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
@@ -416,7 +513,7 @@ function AdminPage() {
                           {busyActionByUser[u.id] === "role" ? "salvando..." : "salvar role"}
                         </button>
                       </>
-                    )}
+                    ) : null}
                     <button
                       className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
                       onClick={() => toggleActive(u)}
@@ -448,7 +545,10 @@ function AdminPage() {
             ))}
             {!pageData.items.length ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center font-mono text-xs text-muted-foreground">
+                <td
+                  colSpan={pageSource === "wagoo" ? wagooTableColSpan : avendasTableColSpan}
+                  className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
+                >
                   Sem usuários para o filtro atual.
                 </td>
               </tr>
