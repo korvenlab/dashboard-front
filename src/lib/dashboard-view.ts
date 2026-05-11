@@ -139,8 +139,18 @@ function parseKpis(raw: unknown): Kpi[] | undefined {
   }[] = [
     { keys: ["receita_total"], label: "Receita Atual", formatter: "currency" },
     {
-      keys: ["usuarios_ativos_wagoo", "usuarios_ativos", "assinaturas_ativas_wagoo"],
-      label: "Usuários Ativos (Wagoo)",
+      keys: [
+        "usuarios_acesso_app_wagoo",
+        "usuarios_ativos_wagoo",
+        "usuarios_ativos",
+        "assinaturas_ativas_wagoo",
+      ],
+      label: "Contas com acesso ao app (Wagoo)",
+      formatter: "number",
+    },
+    {
+      keys: ["assinaturas_ativas_wagoo"],
+      label: "Assinaturas Stripe activas (Wagoo)",
       formatter: "number",
     },
     {

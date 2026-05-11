@@ -255,8 +255,8 @@ function AdminPage() {
   }, [pageData.items]);
 
   const sourceSwitching = source !== pageSource;
-  const wagooTableColSpan = 11;
-  const avendasTableColSpan = 6;
+  const wagooTableColSpan = 12;
+  const avendasTableColSpan = 7;
 
   return (
     <div className="space-y-6 p-6">
@@ -360,6 +360,7 @@ function AdminPage() {
                 <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Role</th>
               )}
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Status</th>
+              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Último login</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Criado</th>
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ações</th>
             </tr>
@@ -468,6 +469,14 @@ function AdminPage() {
                       inativo
                     </span>
                   )}
+                </td>
+                <td className="max-w-[140px] px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                  {u.lastSignInAt
+                    ? new Date(u.lastSignInAt).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
+                    : "—"}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">{u.createdAt ? u.createdAt.slice(0, 10) : "—"}</td>
                 <td className="px-3 py-2">
