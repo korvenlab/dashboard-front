@@ -111,7 +111,9 @@ export const fetchSupportFeedbackMessages = createServerFn({ method: "GET" })
 
     const wagEnv = getWagooServerEnv();
     if (!wagEnv.apiBaseUrl?.trim() || !wagEnv.metricsApiKey?.trim()) {
-      warnings.push("Wagoo: configure WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY no servidor do dashboard.");
+      warnings.push(
+        "Wagoo: configure WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY ou ADMIN_API_SECRET (igual ao wag-backend) no servidor do dashboard.",
+      );
     } else {
       try {
         const rows = await fetchFeedbackMessagesFromBackend(

@@ -1,9 +1,13 @@
 /**
  * Ambiente exclusivo do servidor (SSR / Node / Workers). Nunca exponha isto ao browser.
  * `WAGOO_*` → API Wagoo (wag-backend). `TWO_AVENDAS_*` → API 2AVendas (2A-back). Prefixos só histórico.
+ *
+ * Wagoo — chave de admin/métricas HTTP: use `WAGOO_METRICS_API_KEY` **ou** o mesmo valor de
+ * `ADMIN_API_SECRET` do wag-backend (Bearer / X-API-Key), para um único segredo no Korven Dashboard.
  */
 export type MetricsApiEnv = {
   apiBaseUrl: string | undefined;
+  /** Bearer enviado ao wag-backend; preenchido por `WAGOO_METRICS_API_KEY` ou `ADMIN_API_SECRET`. */
   metricsApiKey: string | undefined;
 };
 
@@ -30,14 +34,38 @@ function readEnvPair(
   };
 }
 
+function firstNonEmptyTrimmed(...vals: (string | undefined)[]): string | undefined {
+  for (const v of vals) {
+    const t = typeof v === "string" ? v.trim() : "";
+    if (t) return t;
+  }
+  return undefined;
+}
+
 export function getWagooServerEnv(): WagooServerEnv {
   const g = globalThis as typeof globalThis & {
     cloudflare?: { env?: Record<string, string | undefined> };
   };
-  return readEnvPair(
-    { url: "WAGOO_API_BASE_URL", key: "WAGOO_METRICS_API_KEY" },
-    g.cloudflare?.env,
-  );
+  const cf = g.cloudflare?.env;
+  const fromProcess =
+    typeof process !== "undefined" && process.env
+      ? {
+          apiBaseUrl: process.env.WAGOO_API_BASE_URL,
+          metricsApiKey: firstNonEmptyTrimmed(
+            process.env.WAGOO_METRICS_API_KEY,
+            process.env.ADMIN_API_SECRET,
+          ),
+        }
+      : { apiBaseUrl: undefined, metricsApiKey: undefined };
+
+  return {
+    apiBaseUrl: cf?.WAGOO_API_BASE_URL ?? fromProcess.apiBaseUrl,
+    metricsApiKey: firstNonEmptyTrimmed(
+      cf?.WAGOO_METRICS_API_KEY,
+      cf?.ADMIN_API_SECRET,
+      fromProcess.metricsApiKey,
+    ),
+  };
 }
 
 export function getTwoAvendasServerEnv(): TwoAvendasServerEnv {

@@ -12,6 +12,9 @@ export type AdminUser = {
   active: boolean;
   /** Wagoo: espelha `profiles.has_paid` quando o backend expõe o campo. */
   hasPaid?: boolean;
+  /** Wagoo: acesso efetivo (Stripe ou cortesia). */
+  hasAccess?: boolean;
+  complimentary_access_until?: string | null;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -192,6 +195,9 @@ function normalizeUser(raw: unknown): AdminUser | null {
     lastSignInAt: asString(r.lastSignInAt) ?? asString(r.last_sign_in_at),
   };
   if (hasPaid !== undefined) out.hasPaid = hasPaid;
+  if (typeof r.hasAccess === "boolean") out.hasAccess = r.hasAccess;
+  if (typeof r.complimentary_access_until === "string")
+    out.complimentary_access_until = r.complimentary_access_until;
   return out;
 }
 
@@ -221,7 +227,7 @@ function getSourceEnv(source: AdminSource): { baseUrl?: string; apiKey?: string 
 
 async function callAdminApi(
   source: AdminSource,
-  method: "GET" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<unknown> {
@@ -229,7 +235,11 @@ async function callAdminApi(
   const base = env.baseUrl?.trim();
   const key = env.apiKey?.trim();
   if (!base || !key) {
-    throw new Error(`${source}: variáveis de ambiente ausentes`);
+    const hint =
+      source === "wagoo"
+        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY ou ADMIN_API_SECRET (mesmo valor do wag-backend)."
+        : "Defina TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY.";
+    throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
   const url = new URL(`${base.replace(/\/+$/, "")}${path}`);
   const res = await fetch(url.toString(), {
@@ -397,6 +407,72 @@ export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
     const root = asRecord(raw);
     const payload = asRecord(root?.data);
     return normalizeUser(payload ?? { id: data.id, hasPaid: data.hasPaid });
+  }) as any);
+
+export type WagooPromoLink = {
+  id: string;
+  code: string;
+  label: string | null;
+  complimentary_days: number;
+  max_redemptions: number | null;
+  redemption_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  signup_url?: string;
+};
+
+export const fetchWagooPromoLinks = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ source: z.literal("wagoo") }))
+  .handler((async (ctx: unknown): Promise<WagooPromoLink[]> => {
+    const { data } = ctx as { data: { source: "wagoo" } };
+    const raw = await callAdminApi(data.source, "GET", "/api/admin/wagoo/promo-links");
+    const root = asRecord(raw);
+    const payload = asRecord(root?.data) ?? {};
+    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
+    return itemsRaw as WagooPromoLink[];
+  }) as any);
+
+const createPromoSchema = z.object({
+  source: z.literal("wagoo"),
+  label: z.string().max(200).optional(),
+  complimentary_days: z.number().int().min(1).max(730).optional(),
+  max_redemptions: z.number().int().min(1).optional().nullable(),
+  expires_at: z.string().optional().nullable(),
+});
+
+export const createWagooPromoLink = createServerFn({ method: "POST" })
+  .inputValidator(createPromoSchema)
+  .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
+    const { data } = ctx as { data: z.infer<typeof createPromoSchema> };
+    const body: Record<string, unknown> = {};
+    if (data.label != null) body.label = data.label;
+    if (data.complimentary_days != null) body.complimentary_days = data.complimentary_days;
+    if (data.max_redemptions !== undefined) body.max_redemptions = data.max_redemptions;
+    if (data.expires_at !== undefined) body.expires_at = data.expires_at;
+    const raw = await callAdminApi(data.source, "POST", "/api/admin/wagoo/promo-links", body);
+    const root = asRecord(raw);
+    return (root?.data ?? {}) as WagooPromoLink;
+  }) as any);
+
+const patchPromoSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  is_active: z.boolean(),
+});
+
+export const patchWagooPromoLinkActive = createServerFn({ method: "POST" })
+  .inputValidator(patchPromoSchema)
+  .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
+    const { data } = ctx as { data: z.infer<typeof patchPromoSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "PATCH",
+      `/api/admin/wagoo/promo-links/${encodeURIComponent(data.id)}`,
+      { is_active: data.is_active },
+    );
+    const root = asRecord(raw);
+    return (root?.data ?? {}) as WagooPromoLink;
   }) as any);
 
 export const deleteAdminUser = createServerFn({ method: "POST" })
