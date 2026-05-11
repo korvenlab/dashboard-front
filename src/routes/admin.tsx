@@ -46,12 +46,6 @@ function formatComplimentaryRemaining(until: string | null | undefined): string 
   return `${Math.max(0, m)} min`;
 }
 
-function complimentaryOriginLabel(u: AdminUser): string {
-  if (!complimentaryIsActive(u.complimentary_access_until)) return "—";
-  if (u.complimentaryViaLink) return "Link / convite";
-  return "Painel (admin)";
-}
-
 function stringifyUnknown(e: unknown): string {
   if (typeof e === "string") return e;
   if (e instanceof Error) return e.message;
@@ -278,7 +272,7 @@ function AdminPage() {
       </div>
 
       <section className="rounded border border-border bg-card/40 p-3">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Origem</div>
+        <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">App</div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             className={`rounded border px-3 py-1 font-mono text-xs ${
@@ -303,9 +297,11 @@ function AdminPage() {
             <span className="mx-1.5 text-muted-foreground">·</span>
             <code className="rounded bg-muted px-1 py-0.5 text-[10px]">Stripe</code> mostra{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-[10px]">has_paid</code> (só leitura; webhook Stripe).
-            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> é efectivo (pago ou cortesia
-            activa). Use «Ajustar cortesia» para conceder dias ou revogar; quem já usou link de convite aparece em
-            Origem.
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> é o que a Wagoo usa na
+            prática. A coluna <span className="text-foreground">Origem do acesso</span> resume se vem de{" "}
+            <code className="text-[10px]">has_paid</code> (Stripe ou SQL), de cortesia por{" "}
+            <code className="text-[10px]">link</code> ou de cortesia só na base / painel — passe o rato para ver o
+            texto completo.
           </div>
         ) : null}
       </section>
@@ -354,7 +350,9 @@ function AdminPage() {
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Stripe</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Acesso</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Cortesia até</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Origem</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Origem do acesso
+                  </th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Tempo restante</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ajustar cortesia</th>
                 </>
@@ -411,8 +409,13 @@ function AdminPage() {
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      {complimentaryOriginLabel(u)}
+                    <td className="max-w-[220px] px-3 py-2 align-top">
+                      <span
+                        className="block cursor-help font-mono text-[10px] leading-snug text-muted-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                        title={u.accessOriginDetail ?? ""}
+                      >
+                        {u.accessOriginSummary ?? "—"}
+                      </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
                       {formatComplimentaryRemaining(u.complimentary_access_until)}

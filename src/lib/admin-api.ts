@@ -17,6 +17,10 @@ export type AdminUser = {
   complimentary_access_until?: string | null;
   /** Wagoo: existe resgate de link promocional (`wagoo_promo_redemptions`). */
   complimentaryViaLink?: boolean;
+  /** Wagoo: resumo de onde vem o acesso (Stripe, link, base). */
+  accessOriginSummary?: string;
+  /** Wagoo: texto longo (tooltip) explicando os canais. */
+  accessOriginDetail?: string;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -223,6 +227,8 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (hasPaid !== undefined) out.hasPaid = hasPaid;
   if (untilPick !== undefined) out.complimentary_access_until = untilPick;
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
+  if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
+  if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
   out.hasAccess = computeWagooHasAccess(out.hasPaid, out.complimentary_access_until);
   return out;
 }
