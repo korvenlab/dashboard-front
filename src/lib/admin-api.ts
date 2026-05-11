@@ -190,7 +190,16 @@ function extractHasPaidFromUserPayload(raw: Record<string, unknown>): boolean | 
 }
 
 function pickComplimentaryUntil(raw: Record<string, unknown>): string | null | undefined {
-  const v = raw.complimentary_access_until ?? raw.complimentaryAccessUntil;
+  const profile = asRecord(raw.profile);
+  const profilesArr = Array.isArray(raw.profiles) ? raw.profiles : null;
+  const firstProfile = profilesArr?.length ? asRecord(profilesArr[0]) : undefined;
+  const v =
+    raw.complimentary_access_until ??
+    raw.complimentaryAccessUntil ??
+    firstProfile?.complimentary_access_until ??
+    firstProfile?.complimentaryAccessUntil ??
+    profile?.complimentary_access_until ??
+    profile?.complimentaryAccessUntil;
   if (v === null) return null;
   if (v === undefined) return undefined;
   if (typeof v === "string") {
@@ -202,12 +211,39 @@ function pickComplimentaryUntil(raw: Record<string, unknown>): string | null | u
   return undefined;
 }
 
+/** Espelha `complimentaryUntilToMillis` do wag-backend (`profileAccess.ts`). */
+function complimentaryUntilToMillis(until: unknown): number | null {
+  if (until === null || until === undefined) return null;
+  if (typeof until === "string") {
+    const t = new Date(until.trim()).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  if (typeof until === "number" && Number.isFinite(until) && until > 1e12) return until;
+  if (until instanceof Date) {
+    const t = until.getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+/** Aceita boolean, 0/1 e strings; usado para `hasAccess` / `has_access` vindos de JSON heterogéneo. */
+function coerceOptionalBoolean(v: unknown): boolean | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number" && Number.isFinite(v)) return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (["true", "1", "yes", "t", "sim", "on", "ligado", "ativo"].includes(s)) return true;
+    if (["false", "0", "no", "f", "não", "nao", "off", "desligado", "inativo"].includes(s)) return false;
+  }
+  return undefined;
+}
+
 /** Mesma regra que o wag-backend (`profileHasWagooAccess`), recalculada no dashboard. */
-function computeWagooHasAccess(hasPaid: boolean | undefined, until: string | null | undefined): boolean {
+function computeWagooHasAccess(hasPaid: boolean | undefined, until: unknown): boolean {
   if (hasPaid === true) return true;
-  if (!until || typeof until !== "string") return false;
-  const t = new Date(until).getTime();
-  return Number.isFinite(t) && t > Date.now();
+  const ms = complimentaryUntilToMillis(until);
+  return ms != null && ms > Date.now();
 }
 
 function normalizeUser(raw: unknown): AdminUser | null {
@@ -231,11 +267,19 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
   if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
-  /** Preferir `hasAccess` calculado no wag-backend (evita divergência por parsing no SSR). */
-  if (typeof r.hasAccess === "boolean") {
-    out.hasAccess = r.hasAccess;
+  /** Preferir valor explícito do wag-backend; aceitar snake_case e tipos não estritamente boolean. */
+  const accessFromApi =
+    coerceOptionalBoolean(r.hasAccess) ?? coerceOptionalBoolean(r.has_access);
+  if (accessFromApi !== undefined) {
+    out.hasAccess = accessFromApi;
   } else {
-    out.hasAccess = computeWagooHasAccess(out.hasPaid, out.complimentary_access_until);
+    const untilRaw =
+      untilPick !== undefined
+        ? untilPick
+        : (r.complimentary_access_until ??
+            r.complimentaryAccessUntil ??
+            (asRecord(r.profile)?.complimentary_access_until as unknown));
+    out.hasAccess = computeWagooHasAccess(out.hasPaid, untilRaw);
   }
   return out;
 }

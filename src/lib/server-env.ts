@@ -29,17 +29,32 @@ function readEnvPair(
       : { apiBaseUrl: undefined, metricsApiKey: undefined };
 
   return {
-    apiBaseUrl: cfEnv?.[keys.url] ?? fromProcess.apiBaseUrl,
-    metricsApiKey: cfEnv?.[keys.key] ?? fromProcess.metricsApiKey,
+    apiBaseUrl: stripEnvNoise(cfEnv?.[keys.url] ?? fromProcess.apiBaseUrl),
+    metricsApiKey: stripEnvNoise(cfEnv?.[keys.key] ?? fromProcess.metricsApiKey),
   };
 }
 
 function firstNonEmptyTrimmed(...vals: (string | undefined)[]): string | undefined {
   for (const v of vals) {
-    const t = typeof v === "string" ? v.trim() : "";
-    if (t) return t;
+    const cleaned = stripEnvNoise(typeof v === "string" ? v : undefined);
+    if (cleaned) return cleaned;
   }
   return undefined;
+}
+
+/** Remove aspas envolventes e `\n` final (copy-paste de `.env` no Render / painéis). */
+function stripEnvNoise(v: string | undefined): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  let s = String(v).trim();
+  if (!s) return undefined;
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  s = s.replace(/\\n$/g, "").replace(/\n$/g, "").replace(/\r$/g, "").trim();
+  return s || undefined;
 }
 
 export function getWagooServerEnv(): WagooServerEnv {
@@ -59,7 +74,7 @@ export function getWagooServerEnv(): WagooServerEnv {
       : { apiBaseUrl: undefined, metricsApiKey: undefined };
 
   return {
-    apiBaseUrl: cf?.WAGOO_API_BASE_URL ?? fromProcess.apiBaseUrl,
+    apiBaseUrl: stripEnvNoise(cf?.WAGOO_API_BASE_URL ?? fromProcess.apiBaseUrl),
     metricsApiKey: firstNonEmptyTrimmed(
       cf?.WAGOO_METRICS_API_KEY,
       cf?.ADMIN_API_SECRET,
