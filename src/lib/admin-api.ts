@@ -264,6 +264,19 @@ function getSourceEnv(source: AdminSource): { baseUrl?: string; apiKey?: string 
   return { baseUrl: env.apiBaseUrl, apiKey: env.metricsApiKey };
 }
 
+/** Evita `WAGOO_API_BASE_URL` já terminar em `/api/admin` e o path repetir o prefixo (404 no catch-all). */
+function resolveAdminApiBaseUrl(base: string, source: AdminSource): string {
+  let b = base.replace(/\/+$/, "");
+  if (source === "wagoo") {
+    const lower = b.toLowerCase();
+    const suffix = "/api/admin";
+    if (lower.endsWith(suffix)) {
+      b = b.slice(0, b.length - suffix.length).replace(/\/+$/, "");
+    }
+  }
+  return b;
+}
+
 async function callAdminApi(
   source: AdminSource,
   method: "GET" | "POST" | "PATCH" | "DELETE",
@@ -280,7 +293,7 @@ async function callAdminApi(
         : "Defina TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY.";
     throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
-  const url = new URL(`${base.replace(/\/+$/, "")}${path}`);
+  const url = new URL(`${resolveAdminApiBaseUrl(base, source)}${path}`);
   const res = await fetch(url.toString(), {
     method,
     headers: {
@@ -454,14 +467,14 @@ const wagooComplimentaryAccessSchema = z.object({
   preset: z.enum(["none", "7", "30", "60", "90", "180", "365"]),
 });
 
-/** Wagoo: PATCH cortesia administrativa (`complimentary_access_until`); não altera Stripe (`has_paid`). */
+/** Wagoo: cortesia administrativa (`complimentary_access_until`); não altera Stripe (`has_paid`). POST evita proxy que bloqueia PATCH. */
 export const patchWagooUserComplimentaryAccess = createServerFn({ method: "POST" })
   .inputValidator(wagooComplimentaryAccessSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof wagooComplimentaryAccessSchema> };
     const raw = await callAdminApi(
       data.source,
-      "PATCH",
+      "POST",
       `/api/admin/users/${encodeURIComponent(data.id)}/complimentary-access`,
       { preset: data.preset },
     );
