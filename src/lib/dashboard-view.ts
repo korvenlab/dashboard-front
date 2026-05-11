@@ -206,6 +206,13 @@ function parseEvents(raw: unknown): AppEvent[] | undefined {
   return out.length ? out : undefined;
 }
 
+/** Rota canónica `/wagoo` no Korven Dashboard; APIs legadas (ex.: 2A-back) expunham `waggo`. */
+function normalizeKorvenWagooHref(raw: string): string {
+  let h = raw.trim();
+  if (!h.startsWith("/")) h = `/${h}`;
+  return h.replace(/^\/waggo(?=\/|$)/, "/wagoo");
+}
+
 function parseUi(raw: unknown): DashboardUiConfig {
   const o = record(raw);
   if (!o) return {};
@@ -223,7 +230,7 @@ function parseUi(raw: unknown): DashboardUiConfig {
         (typeof r.url === "string" && r.url) ||
         "";
       const icon = typeof r.icon === "string" ? r.icon : undefined;
-      if (label && href) sidebar_itens.push({ label, href, icon });
+      if (label && href) sidebar_itens.push({ label, href: normalizeKorvenWagooHref(href), icon });
     }
     if (!sidebar_itens.length) sidebar_itens = undefined;
   }
@@ -346,7 +353,7 @@ function mergeUiConfigs(w: DashboardUiConfig | undefined, a: DashboardUiConfig |
   for (const list of [w?.sidebar_itens, a?.sidebar_itens]) {
     if (!list) continue;
     for (const it of list) {
-      const href = it.href.startsWith("/") ? it.href : `/${it.href}`;
+      const href = normalizeKorvenWagooHref(it.href.startsWith("/") ? it.href : `/${it.href}`);
       if (seen.has(href)) continue;
       seen.add(href);
       sidebar_itens.push({ ...it, href });
