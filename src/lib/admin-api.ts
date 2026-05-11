@@ -197,6 +197,8 @@ function pickComplimentaryUntil(raw: Record<string, unknown>): string | null | u
     const t = v.trim();
     return t.length ? t : null;
   }
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === "number" && Number.isFinite(v) && v > 1e12) return new Date(v).toISOString();
   return undefined;
 }
 
@@ -229,7 +231,12 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
   if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
-  out.hasAccess = computeWagooHasAccess(out.hasPaid, out.complimentary_access_until);
+  /** Preferir `hasAccess` calculado no wag-backend (evita divergência por parsing no SSR). */
+  if (typeof r.hasAccess === "boolean") {
+    out.hasAccess = r.hasAccess;
+  } else {
+    out.hasAccess = computeWagooHasAccess(out.hasPaid, out.complimentary_access_until);
+  }
   return out;
 }
 
