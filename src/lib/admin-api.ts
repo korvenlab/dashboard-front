@@ -207,18 +207,39 @@ function pickComplimentaryUntil(raw: Record<string, unknown>): string | null | u
     return t.length ? t : null;
   }
   if (v instanceof Date) return v.toISOString();
-  if (typeof v === "number" && Number.isFinite(v) && v > 1e12) return new Date(v).toISOString();
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+    const ms = epochNumberToMillis(v);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+  }
   return undefined;
+}
+
+/** Igual ao wag-backend `profileAccess.epochNumberToMillis` (segundos vs ms). */
+function epochNumberToMillis(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return NaN;
+  if (n < 10_000_000_000) return Math.round(n * 1000);
+  return Math.round(n);
 }
 
 /** Espelha `complimentaryUntilToMillis` do wag-backend (`profileAccess.ts`). */
 function complimentaryUntilToMillis(until: unknown): number | null {
   if (until === null || until === undefined) return null;
   if (typeof until === "string") {
-    const t = new Date(until.trim()).getTime();
-    return Number.isFinite(t) ? t : null;
+    const s = until.trim();
+    if (!s) return null;
+    const fromIso = new Date(s).getTime();
+    if (Number.isFinite(fromIso)) return fromIso;
+    const n = Number(s);
+    if (Number.isFinite(n) && n > 0) {
+      const ms = epochNumberToMillis(n);
+      return Number.isFinite(ms) ? ms : null;
+    }
+    return null;
   }
-  if (typeof until === "number" && Number.isFinite(until) && until > 1e12) return until;
+  if (typeof until === "number" && Number.isFinite(until) && until > 0) {
+    const ms = epochNumberToMillis(until);
+    return Number.isFinite(ms) ? ms : null;
+  }
   if (until instanceof Date) {
     const t = until.getTime();
     return Number.isFinite(t) ? t : null;
