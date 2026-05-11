@@ -475,6 +475,28 @@ export const patchWagooPromoLinkActive = createServerFn({ method: "POST" })
     return (root?.data ?? {}) as WagooPromoLink;
   }) as any);
 
+const deletePromoSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+});
+
+export const deleteWagooPromoLink = createServerFn({ method: "POST" })
+  .inputValidator(deletePromoSchema)
+  .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
+    const { data } = ctx as { data: z.infer<typeof deletePromoSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "DELETE",
+      `/api/admin/wagoo/promo-links/${encodeURIComponent(data.id)}`,
+    );
+    const root = asRecord(raw);
+    const out = asRecord(root?.data) ?? {};
+    return {
+      id: asString(out.id) ?? data.id,
+      deleted: asBool(out.deleted, true),
+    };
+  }) as any);
+
 export const deleteAdminUser = createServerFn({ method: "POST" })
   .inputValidator(byIdSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {

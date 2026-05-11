@@ -6,6 +6,7 @@ import { EventsTable } from "@/components/events-table";
 import { useRootLoaderData } from "@/hooks/use-root-loader-data";
 import {
   createWagooPromoLink,
+  deleteWagooPromoLink,
   fetchWagooPromoLinks,
   patchWagooPromoLinkActive,
   type WagooPromoLink,
@@ -47,6 +48,7 @@ function WagooPromoLinksPanel() {
   const [durationPreset, setDurationPreset] = useState<string>("60");
   const [customDays, setCustomDays] = useState(60);
   const [maxUses, setMaxUses] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function resolvedComplimentaryDays(): number {
     if (durationPreset === "custom") {
@@ -101,6 +103,27 @@ function WagooPromoLinksPanel() {
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function removeLink(row: WagooPromoLink) {
+    if (
+      !window.confirm(
+        `Apagar permanentemente o link "${row.code}"? O histórico de resgates deste código é removido; quem já resgatou mantém a cortesia até a data.`,
+      )
+    ) {
+      return;
+    }
+    setMessage("");
+    setDeletingId(row.id);
+    try {
+      await deleteWagooPromoLink({ data: { source: "wagoo", id: row.id } });
+      await load();
+      setMessage("Link removido.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -186,7 +209,13 @@ function WagooPromoLinksPanel() {
       </div>
 
       {message ? (
-        <p className={`mt-3 text-[11px] ${message.includes("criado") ? "text-emerald-600" : "text-destructive"}`}>{message}</p>
+        <p
+          className={`mt-3 text-[11px] ${
+            message.includes("criado") || message.includes("removido") ? "text-emerald-600" : "text-destructive"
+          }`}
+        >
+          {message}
+        </p>
       ) : null}
 
       <div className="mt-4 max-h-64 overflow-auto rounded border border-border/60">
@@ -198,6 +227,7 @@ function WagooPromoLinksPanel() {
               <th className="p-2 font-medium">Usos</th>
               <th className="p-2 font-medium">Ativo</th>
               <th className="p-2 font-medium">URL</th>
+              <th className="p-2 font-medium">Apagar</th>
             </tr>
           </thead>
           <tbody>
@@ -245,11 +275,23 @@ function WagooPromoLinksPanel() {
                     )}
                   </div>
                 </td>
+                <td className="p-2 align-top">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 px-2 text-[10px]"
+                    disabled={deletingId === row.id}
+                    onClick={() => void removeLink(row)}
+                  >
+                    {deletingId === row.id ? "…" : "Apagar"}
+                  </Button>
+                </td>
               </tr>
             ))}
             {!items.length && !loading ? (
               <tr>
-                <td colSpan={5} className="p-3 text-muted-foreground">
+                <td colSpan={6} className="p-3 text-muted-foreground">
                   Nenhum link (ou erro ao carregar — verifique WAGOO_API_BASE_URL e ADMIN_API_SECRET ou
                   WAGOO_METRICS_API_KEY no servidor do dashboard).
                 </td>
