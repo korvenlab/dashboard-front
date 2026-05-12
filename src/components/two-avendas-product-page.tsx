@@ -2,6 +2,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { VolumeBarChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
 import { TwoAvendasBillingUnlockCard } from "@/components/two-avendas-billing-unlock-card";
+import { TwoAvendasPromoLinksPanel } from "@/components/two-avendas-promo-links-panel";
 import { useRootLoaderData } from "@/hooks/use-root-loader-data";
 
 export function TwoAvendasProductPage() {
@@ -27,9 +28,12 @@ export function TwoAvendasProductPage() {
       <div>
         <h1 className="font-mono text-xl font-semibold tracking-[0.15em]">2AVendas</h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Desempenho de cadastro de clientes — série `dois_avendas.volume_por_dia` da API /dashboard.
+          Desempenho de cadastro de clientes — série `dois_avendas.volume_por_dia` da API /dashboard. Links de cortesia
+          seguem a mesma lógica do Wagoo (URL com código no login).
         </p>
       </div>
+
+      <TwoAvendasPromoLinksPanel />
 
       <TwoAvendasBillingUnlockCard />
 

@@ -710,3 +710,108 @@ export const mintTwoAvendasOrgAccessLink = createServerFn({ method: "POST" })
       };
     }) as any,
   );
+
+export type TwoAvendasPromoLink = WagooPromoLink;
+
+function twoAvendasBillingEnv(): { base: string; secret: string } {
+  const env = getTwoAvendasServerEnv();
+  const base = env.apiBaseUrl?.trim();
+  const secret = getTwoAvendasBillingAdminSecret()?.trim() || env.metricsApiKey?.trim();
+  if (!base || !secret) {
+    throw new Error(
+      "2avendas: TWO_AVENDAS_API_BASE_URL e segredo de billing (TWO_AVENDAS_BILLING_ADMIN_SECRET ou métricas) são obrigatórios",
+    );
+  }
+  return { base: base.replace(/\/+$/, ""), secret };
+}
+
+async function twoAvendasBillingRequest(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<Record<string, unknown>> {
+  const { base, secret } = twoAvendasBillingEnv();
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Billing-Admin-Secret": secret,
+    },
+    ...(body !== undefined && method !== "GET" ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await res.text();
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (!contentType.includes("application/json")) {
+    throw new Error(`2avendas: resposta não-JSON (${res.status})`);
+  }
+  const json = text ? (JSON.parse(text) as unknown) : {};
+  const root = asRecord(json);
+  if (!res.ok || root?.ok === false) {
+    throw new Error(extractApiErrorMessage(root, "2avendas", res.status));
+  }
+  return root ?? {};
+}
+
+export const fetchTwoAvendasPromoLinks = createServerFn({ method: "GET" })
+  .inputValidator(z.object({}))
+  .handler((async (): Promise<TwoAvendasPromoLink[]> => {
+    const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
+    const payload = asRecord(root?.data) ?? {};
+    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
+    return itemsRaw as TwoAvendasPromoLink[];
+  }) as any);
+
+const createTwoAvendasPromoSchema = z.object({
+  label: z.string().max(200).optional(),
+  complimentary_days: z.number().int().min(1).max(730).optional(),
+  max_redemptions: z.number().int().min(1).optional().nullable(),
+});
+
+export const createTwoAvendasPromoLink = createServerFn({ method: "POST" })
+  .inputValidator(createTwoAvendasPromoSchema)
+  .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
+    const { data } = ctx as { data: z.infer<typeof createTwoAvendasPromoSchema> };
+    const body: Record<string, unknown> = {};
+    if (data.label != null) body.label = data.label;
+    if (data.complimentary_days != null) body.complimentary_days = data.complimentary_days;
+    if (data.max_redemptions !== undefined) body.max_redemptions = data.max_redemptions;
+    const root = await twoAvendasBillingRequest("POST", "/api/billing/promo-links", body);
+    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+  }) as any);
+
+const patchTwoAvendasPromoSchema = z.object({
+  id: z.string().uuid(),
+  is_active: z.boolean(),
+});
+
+export const patchTwoAvendasPromoLinkActive = createServerFn({ method: "POST" })
+  .inputValidator(patchTwoAvendasPromoSchema)
+  .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
+    const { data } = ctx as { data: z.infer<typeof patchTwoAvendasPromoSchema> };
+    const root = await twoAvendasBillingRequest(
+      "PATCH",
+      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
+      { is_active: data.is_active },
+    );
+    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+  }) as any);
+
+const deleteTwoAvendasPromoSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const deleteTwoAvendasPromoLink = createServerFn({ method: "POST" })
+  .inputValidator(deleteTwoAvendasPromoSchema)
+  .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
+    const { data } = ctx as { data: z.infer<typeof deleteTwoAvendasPromoSchema> };
+    const root = await twoAvendasBillingRequest(
+      "DELETE",
+      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
+    );
+    const out = asRecord(root?.data) ?? {};
+    return {
+      id: asString(out.id) ?? data.id,
+      deleted: asBool(out.deleted, true),
+    };
+  }) as any);
