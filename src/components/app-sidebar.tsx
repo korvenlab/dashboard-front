@@ -43,7 +43,7 @@ function isDashboardHref(url: string): url is DashboardHref {
 const defaultItems: { title: string; url: string; icon: LucideIcon }[] = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard },
   { title: "Wagoo", url: "/wagoo", icon: Boxes },
-  { title: "2AVendas", url: "/avendas", icon: ShoppingCart },
+  { title: "2AVendas", url: "/2avendas", icon: ShoppingCart },
   { title: "Admin", url: "/admin", icon: ShieldUser },
   { title: "Tasks", url: "/tasks", icon: SquareKanban },
   { title: "Monitoramento", url: "/monitoramento", icon: Activity },

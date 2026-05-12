@@ -93,6 +93,19 @@ export function getTwoAvendasServerEnv(): TwoAvendasServerEnv {
   );
 }
 
+/** Segredo para `POST /api/billing/organization-access-link` (header `X-Billing-Admin-Secret`). Se vazio, o mint usa `TWO_AVENDAS_METRICS_API_KEY` só em dev — prefira variável dedicada em produção. */
+export function getTwoAvendasBillingAdminSecret(): string | undefined {
+  const g = globalThis as typeof globalThis & {
+    cloudflare?: { env?: Record<string, string | undefined> };
+  };
+  const cf = g.cloudflare?.env?.TWO_AVENDAS_BILLING_ADMIN_SECRET?.trim();
+  const fromProcess =
+    typeof process !== "undefined" && process.env
+      ? process.env.TWO_AVENDAS_BILLING_ADMIN_SECRET?.trim()
+      : undefined;
+  return cf || fromProcess || undefined;
+}
+
 export function getDashboardBackendEnv(): DashboardBackendEnv {
   const g = globalThis as typeof globalThis & {
     cloudflare?: { env?: Record<string, string | undefined> };

@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getTwoAvendasServerEnv, getWagooServerEnv } from "@/lib/server-env";
+import { getTwoAvendasServerEnv, getTwoAvendasBillingAdminSecret, getWagooServerEnv } from "@/lib/server-env";
 
 export type AdminSource = "wagoo" | "2avendas";
 
@@ -654,3 +654,59 @@ export const deleteAdminUser = createServerFn({ method: "POST" })
       deleted: asBool(out.deleted, true),
     };
   }) as any);
+
+const mint2AvendasUnlockSchema = z.object({
+  organizationId: z.string().uuid(),
+  ttlSeconds: z.number().int().min(120).max(2592000).optional(),
+});
+
+/** Chama 2A-back `POST /api/billing/organization-access-link` (fluxo tipo link Wagoo / liberação sem Stripe). */
+export const mintTwoAvendasOrgAccessLink = createServerFn({ method: "POST" })
+  .inputValidator(mint2AvendasUnlockSchema)
+  .handler(
+    (async (
+      ctx: unknown,
+    ): Promise<{ unlock_url: string; expires_at: string | null; organization_id: string }> => {
+      const { data } = ctx as { data: z.infer<typeof mint2AvendasUnlockSchema> };
+      const env = getTwoAvendasServerEnv();
+      const base = env.apiBaseUrl?.trim();
+      const billingSecret =
+        getTwoAvendasBillingAdminSecret()?.trim() || env.metricsApiKey?.trim();
+      if (!base || !billingSecret) {
+        throw new Error("2avendas: TWO_AVENDAS_API_BASE_URL e segredo de billing (TWO_AVENDAS_BILLING_ADMIN_SECRET ou métricas) são obrigatórios");
+      }
+      const url = `${base.replace(/\/+$/, "")}/api/billing/organization-access-link`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Billing-Admin-Secret": billingSecret,
+        },
+        body: JSON.stringify({
+          organization_id: data.organizationId,
+          ...(data.ttlSeconds != null ? { ttl_seconds: data.ttlSeconds } : {}),
+        }),
+      });
+      const text = await res.text();
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.includes("application/json")) {
+        throw new Error(`2avendas: resposta não-JSON (${res.status})`);
+      }
+      const json = text ? (JSON.parse(text) as unknown) : {};
+      const root = asRecord(json);
+      if (!res.ok || root?.ok === false) {
+        throw new Error(extractApiErrorMessage(root, "2avendas", res.status));
+      }
+      const payload = asRecord(root?.data) ?? {};
+      const unlock_url = asString(payload.unlock_url);
+      if (!unlock_url?.trim()) {
+        throw new Error("2avendas: resposta sem unlock_url");
+      }
+      return {
+        unlock_url: unlock_url.trim(),
+        expires_at: asString(payload.expires_at),
+        organization_id: asString(payload.organization_id) ?? data.organizationId,
+      };
+    }) as any,
+  );

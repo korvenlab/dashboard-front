@@ -15,6 +15,7 @@ import { Route as MonitoramentoRouteImport } from './routes/monitoramento'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as AvendasRouteImport } from './routes/avendas'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as R2avendasRouteImport } from './routes/2avendas'
 import { Route as IndexRouteImport } from './routes/index'
 
 const WagooRoute = WagooRouteImport.update({
@@ -47,6 +48,11 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const R2avendasRoute = R2avendasRouteImport.update({
+  id: '/2avendas',
+  path: '/2avendas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,6 +61,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/2avendas': typeof R2avendasRoute
   '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/2avendas': typeof R2avendasRoute
   '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/2avendas': typeof R2avendasRoute
   '/admin': typeof AdminRoute
   '/avendas': typeof AvendasRoute
   '/mensagens': typeof MensagensRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/2avendas'
     | '/admin'
     | '/avendas'
     | '/mensagens'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/2avendas'
     | '/admin'
     | '/avendas'
     | '/mensagens'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/2avendas'
     | '/admin'
     | '/avendas'
     | '/mensagens'
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  R2avendasRoute: typeof R2avendasRoute
   AdminRoute: typeof AdminRoute
   AvendasRoute: typeof AvendasRoute
   MensagensRoute: typeof MensagensRoute
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/2avendas': {
+      id: '/2avendas'
+      path: '/2avendas'
+      fullPath: '/2avendas'
+      preLoaderRoute: typeof R2avendasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -177,6 +197,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  R2avendasRoute: R2avendasRoute,
   AdminRoute: AdminRoute,
   AvendasRoute: AvendasRoute,
   MensagensRoute: MensagensRoute,
