@@ -21,6 +21,11 @@ export type AdminUser = {
   accessOriginSummary?: string;
   /** Wagoo: texto longo (tooltip) explicando os canais. */
   accessOriginDetail?: string;
+  /** Wagoo: add-on Plano Multi-Barbeiro (`profiles.multi_barber_plan`). */
+  multiBarberPlan?: boolean;
+  multi_barber_plan?: boolean;
+  /** Wagoo: profissionais em `barbeiros`. */
+  barbeirosCount?: number;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -82,6 +87,12 @@ const wagooHasPaidSchema = z.object({
   source: z.literal("wagoo"),
   id: z.string().min(1),
   hasPaid: z.boolean(),
+});
+
+const wagooMultiBarberPlanSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  multiBarberPlan: z.boolean(),
 });
 
 function asRecord(v: unknown): Record<string, unknown> | undefined {
@@ -167,6 +178,42 @@ function coerceHasPaid(v: unknown): boolean | undefined {
  * Coluna `profiles.has_paid` no Wagoo: o wag-backend pode enviar no topo, em `profile`,
  * em `profiles[0]` (join Supabase) ou como `hasPaid` / `has_paid`.
  */
+function coerceMultiBarberPlan(v: unknown): boolean | undefined {
+  return coerceHasPaid(v);
+}
+
+function extractMultiBarberPlanFromUserPayload(raw: Record<string, unknown>): boolean | undefined {
+  const profile = asRecord(raw.profile);
+  const profilesArr = Array.isArray(raw.profiles) ? raw.profiles : null;
+  const firstProfile = profilesArr?.length ? asRecord(profilesArr[0]) : undefined;
+  const candidates = [
+    raw.multiBarberPlan,
+    raw.multi_barber_plan,
+    firstProfile?.multiBarberPlan,
+    firstProfile?.multi_barber_plan,
+    profile?.multiBarberPlan,
+    profile?.multi_barber_plan,
+  ];
+  for (const c of candidates) {
+    const b = coerceMultiBarberPlan(c);
+    if (b !== undefined) return b;
+  }
+  return undefined;
+}
+
+function extractBarbeirosCount(raw: Record<string, unknown>): number | undefined {
+  const candidates = [
+    raw.barbeirosCount,
+    raw.barbeiros_count,
+    asRecord(raw.profile)?.barbeirosCount,
+    asRecord(raw.profile)?.barbeiros_count,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c) && c >= 0) return c;
+  }
+  return undefined;
+}
+
 function extractHasPaidFromUserPayload(raw: Record<string, unknown>): boolean | undefined {
   const profile = asRecord(raw.profile);
   const profilesArr = Array.isArray(raw.profiles) ? raw.profiles : null;
@@ -298,6 +345,13 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
   if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
+  const multiBarberPlan = extractMultiBarberPlanFromUserPayload(r);
+  if (multiBarberPlan !== undefined) {
+    out.multiBarberPlan = multiBarberPlan;
+    out.multi_barber_plan = multiBarberPlan;
+  }
+  const barbeirosCount = extractBarbeirosCount(r);
+  if (barbeirosCount !== undefined) out.barbeirosCount = barbeirosCount;
   /**
    * Nunca confiar só em `hasAccess` da API: proxies/serialização podem desalinhar.
    * Recalcular sempre a partir de `has_paid` + `complimentary_access_until` (igual ao app).
@@ -552,6 +606,21 @@ export const patchWagooUserComplimentaryAccess = createServerFn({ method: "POST"
     );
     const root = asRecord(raw);
     return normalizeUser(root?.data ?? { id: data.id });
+  }) as any);
+
+/** Wagoo: activa ou revoga Plano Multi-Barbeiro (`multi_barber_plan`). */
+export const patchWagooUserMultiBarberPlan = createServerFn({ method: "POST" })
+  .inputValidator(wagooMultiBarberPlanSchema)
+  .handler((async (ctx: unknown): Promise<AdminUser | null> => {
+    const { data } = ctx as { data: z.infer<typeof wagooMultiBarberPlanSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "POST",
+      `/api/admin/users/${encodeURIComponent(data.id)}/multi-barber-plan`,
+      { multiBarberPlan: data.multiBarberPlan },
+    );
+    const root = asRecord(raw);
+    return normalizeUser(root?.data ?? { id: data.id, multiBarberPlan: data.multiBarberPlan });
   }) as any);
 
 export type WagooPromoLink = {

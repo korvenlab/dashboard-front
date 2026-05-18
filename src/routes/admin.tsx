@@ -8,6 +8,7 @@ import {
   patchAdminUserRole,
   patchAdminUserStatus,
   patchWagooUserComplimentaryAccess,
+  patchWagooUserMultiBarberPlan,
   wagooComplimentaryIsActive,
   wagooFormatComplimentaryRemaining,
   type AdminRoleOption,
@@ -151,6 +152,31 @@ function AdminPage() {
     }
   }
 
+  async function toggleWagooMultiBarber(user: AdminUser) {
+    const next = !(user.multiBarberPlan ?? false);
+    setUserBusy(user.id, "multiBarber");
+    setMessage("");
+    try {
+      const updated = (await patchWagooUserMultiBarberPlan({
+        data: { source: "wagoo", id: user.id, multiBarberPlan: next },
+      })) as AdminUser | null;
+      if (updated?.id) {
+        setPageData((prev) => ({
+          ...prev,
+          items: prev.items.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+        }));
+      }
+      await load(pageData.page, "wagoo");
+      setMessage(
+        `Plano Multi-Barbeiro ${next ? "activado" : "revogado"} — ${user.email ?? user.id}.`,
+      );
+    } catch (e) {
+      setMessage(stringifyUnknown(e));
+    } finally {
+      clearUserBusy(user.id);
+    }
+  }
+
   async function applyWagooComplimentary(user: AdminUser) {
     const preset = complimentaryDraftByUser[user.id]?.trim();
     if (!preset) {
@@ -265,7 +291,7 @@ function AdminPage() {
   }, [pageData.items]);
 
   const sourceSwitching = source !== pageSource;
-  const wagooTableColSpan = 12;
+  const wagooTableColSpan = 14;
   const avendasTableColSpan = 7;
 
   return (
@@ -349,7 +375,7 @@ function AdminPage() {
 
       <section className="overflow-x-auto rounded border border-border">
         <table
-          className={`w-full border-collapse ${pageSource === "wagoo" ? "min-w-[1180px]" : "min-w-[900px]"}`}
+          className={`w-full border-collapse ${pageSource === "wagoo" ? "min-w-[1320px]" : "min-w-[900px]"}`}
         >
           <thead>
             <tr className="border-b border-border bg-card">
@@ -358,6 +384,10 @@ function AdminPage() {
               {pageSource === "wagoo" ? (
                 <>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Stripe</th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Multi-Barbeiro
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Equipe</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Acesso</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Cortesia até</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
@@ -396,6 +426,28 @@ function AdminPage() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      <button
+                        type="button"
+                        className={`rounded border px-2 py-0.5 font-mono text-[10px] ${
+                          u.multiBarberPlan
+                            ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+                            : "border-border text-muted-foreground"
+                        }`}
+                        disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
+                        onClick={() => void toggleWagooMultiBarber(u)}
+                        title="Alternar Plano Multi-Barbeiro (equipe + IA)"
+                      >
+                        {busyActionByUser[u.id] === "multiBarber"
+                          ? "…"
+                          : u.multiBarberPlan
+                            ? "premium"
+                            : "off"}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-center font-mono text-xs text-muted-foreground">
+                      {u.barbeirosCount ?? 0}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">
                       {typeof u.hasAccess === "boolean" ? (
