@@ -5,6 +5,7 @@ import {
   fetchAdminUserAssets,
   fetchAdminRoles,
   fetchAdminUsers,
+  patchAdminUserHasPaid,
   patchAdminUserRole,
   patchAdminUserStatus,
   patchWagooUserComplimentaryAccess,
@@ -22,7 +23,18 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
+const WAGOO_SUBSCRIPTION_OPTIONS = [
+  { value: "false", label: "Sem assinatura (não pago)" },
+  { value: "true", label: "Assinatura Wagoo (pago)" },
+] as const;
+
+const WAGOO_MULTI_BARBER_OPTIONS = [
+  { value: "false", label: "Plano standard (1 profissional)" },
+  { value: "true", label: "Multi-Barbeiro (premium)" },
+] as const;
+
 const WAGOO_COMPLIMENTARY_PRESETS = [
+  { value: "", label: "— manter cortesia actual —" },
   { value: "none", label: "Sem cortesia (revogar)" },
   { value: "7", label: "+7 dias" },
   { value: "30", label: "+30 dias" },
@@ -64,6 +76,93 @@ function stringifyUnknown(e: unknown): string {
   return String(e);
 }
 
+type WagooPlanSelectorsProps = {
+  hasPaidValue: string;
+  multiBarberValue: string;
+  complimentaryValue: string;
+  disabled: boolean;
+  busy: boolean;
+  onHasPaidChange: (value: string) => void;
+  onMultiBarberChange: (value: string) => void;
+  onComplimentaryChange: (value: string) => void;
+  onApply: () => void;
+};
+
+function WagooPlanSelectors({
+  hasPaidValue,
+  multiBarberValue,
+  complimentaryValue,
+  disabled,
+  busy,
+  onHasPaidChange,
+  onMultiBarberChange,
+  onComplimentaryChange,
+  onApply,
+}: WagooPlanSelectorsProps) {
+  const selectClass =
+    "h-7 w-full max-w-[220px] rounded border border-border bg-card px-2 font-mono text-[10px]";
+
+  return (
+    <div className="flex min-w-[200px] flex-col gap-2">
+      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        Assinatura Wagoo
+        <select
+          className={selectClass}
+          value={hasPaidValue}
+          disabled={disabled}
+          onChange={(e) => onHasPaidChange(e.target.value)}
+        >
+          <option value="">— actual —</option>
+          {WAGOO_SUBSCRIPTION_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        Plano Multi-Barbeiro
+        <select
+          className={selectClass}
+          value={multiBarberValue}
+          disabled={disabled}
+          onChange={(e) => onMultiBarberChange(e.target.value)}
+        >
+          <option value="">— actual —</option>
+          {WAGOO_MULTI_BARBER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        Cortesia (opcional)
+        <select
+          className={selectClass}
+          value={complimentaryValue}
+          disabled={disabled}
+          onChange={(e) => onComplimentaryChange(e.target.value)}
+        >
+          {WAGOO_COMPLIMENTARY_PRESETS.map((p) => (
+            <option key={p.value || "keep"} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="h-8 rounded border border-primary bg-primary/15 px-3 font-mono text-[10px] font-semibold text-primary hover:bg-primary/25 disabled:opacity-50"
+        disabled={disabled}
+        onClick={onApply}
+      >
+        {busy ? "A guardar…" : "Aplicar planos"}
+      </button>
+    </div>
+  );
+}
+
 function AdminPage() {
   const [source, setSource] = useState<AdminSource>("wagoo");
   const [pageSource, setPageSource] = useState<AdminSource>("wagoo");
@@ -82,6 +181,8 @@ function AdminPage() {
   const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
   const [busyActionByUser, setBusyActionByUser] = useState<Record<string, string>>({});
+  const [hasPaidDraftByUser, setHasPaidDraftByUser] = useState<Record<string, string>>({});
+  const [multiBarberDraftByUser, setMultiBarberDraftByUser] = useState<Record<string, string>>({});
   const [complimentaryDraftByUser, setComplimentaryDraftByUser] = useState<Record<string, string>>({});
 
   function setUserBusy(userId: string, label: string) {
@@ -107,6 +208,8 @@ function AdminPage() {
       })) as { items: AdminUser[]; page: number; limit: number; total: number };
       setPageData(data);
       setPageSource(targetSource);
+      setHasPaidDraftByUser({});
+      setMultiBarberDraftByUser({});
       setComplimentaryDraftByUser({});
       setAssets(null);
     } catch (e) {
@@ -152,57 +255,60 @@ function AdminPage() {
     }
   }
 
-  async function toggleWagooMultiBarber(user: AdminUser) {
-    const next = !(user.multiBarberPlan ?? false);
-    setUserBusy(user.id, "multiBarber");
-    setMessage("");
-    try {
-      const updated = (await patchWagooUserMultiBarberPlan({
-        data: { source: "wagoo", id: user.id, multiBarberPlan: next },
-      })) as AdminUser | null;
-      if (updated?.id) {
-        setPageData((prev) => ({
-          ...prev,
-          items: prev.items.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
-        }));
-      }
-      await load(pageData.page, "wagoo");
-      setMessage(
-        `Plano Multi-Barbeiro ${next ? "activado" : "revogado"} — ${user.email ?? user.id}.`,
-      );
-    } catch (e) {
-      setMessage(stringifyUnknown(e));
-    } finally {
-      clearUserBusy(user.id);
-    }
-  }
+  async function applyWagooPlans(user: AdminUser) {
+    const subDraft = hasPaidDraftByUser[user.id];
+    const multiDraft = multiBarberDraftByUser[user.id];
+    const cortesiaDraft = complimentaryDraftByUser[user.id]?.trim() ?? "";
 
-  async function applyWagooComplimentary(user: AdminUser) {
-    const preset = complimentaryDraftByUser[user.id]?.trim();
-    if (!preset) {
-      setMessage("Escolha uma opção em «Ajustar cortesia» antes de aplicar.");
+    if (!subDraft && !multiDraft && !cortesiaDraft) {
+      setMessage("Seleccione pelo menos um plano para alterar.");
       return;
     }
-    setUserBusy(user.id, "complimentary");
+
+    setUserBusy(user.id, "planos");
     setMessage("");
+    const changes: string[] = [];
+
     try {
-      const updated = (await patchWagooUserComplimentaryAccess({
-        data: {
-          source: "wagoo",
-          id: user.id,
-          preset: preset as "none" | "7" | "30" | "60" | "90" | "180" | "365",
-        },
-      })) as AdminUser | null;
-      if (updated?.id) {
-        setPageData((prev) => ({
-          ...prev,
-          items: prev.items.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
-        }));
+      if (subDraft === "true" || subDraft === "false") {
+        const wantPaid = subDraft === "true";
+        if (wantPaid !== (user.hasPaid === true)) {
+          await patchAdminUserHasPaid({
+            data: { source: "wagoo", id: user.id, hasPaid: wantPaid },
+          });
+          changes.push(wantPaid ? "assinatura activa" : "assinatura revogada");
+        }
       }
+
+      if (multiDraft === "true" || multiDraft === "false") {
+        const wantMulti = multiDraft === "true";
+        if (wantMulti !== (user.multiBarberPlan === true)) {
+          await patchWagooUserMultiBarberPlan({
+            data: { source: "wagoo", id: user.id, multiBarberPlan: wantMulti },
+          });
+          changes.push(wantMulti ? "Multi-Barbeiro activo" : "Multi-Barbeiro desactivado");
+        }
+      }
+
+      if (cortesiaDraft) {
+        await patchWagooUserComplimentaryAccess({
+          data: {
+            source: "wagoo",
+            id: user.id,
+            preset: cortesiaDraft as "none" | "7" | "30" | "60" | "90" | "180" | "365",
+          },
+        });
+        changes.push(`cortesia (${cortesiaDraft === "none" ? "revogada" : `+${cortesiaDraft}d`})`);
+      }
+
       await load(pageData.page, "wagoo");
-      setMessage(`Cortesia atualizada: ${user.email ?? user.id}.`);
+      if (changes.length) {
+        setMessage(`Planos actualizados (${user.email ?? user.id}): ${changes.join(", ")}.`);
+      } else {
+        setMessage("Nenhuma alteração em relação ao estado actual.");
+      }
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      setMessage(stringifyUnknown(e));
     } finally {
       clearUserBusy(user.id);
     }
@@ -285,13 +391,21 @@ function AdminPage() {
   }, [source]);
 
   useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const u of pageData.items) next[u.id] = u.role;
-    setRoleDraftByUser(next);
+    const nextRole: Record<string, string> = {};
+    const nextPaid: Record<string, string> = {};
+    const nextMulti: Record<string, string> = {};
+    for (const u of pageData.items) {
+      nextRole[u.id] = u.role;
+      if (typeof u.hasPaid === "boolean") nextPaid[u.id] = u.hasPaid ? "true" : "false";
+      if (typeof u.multiBarberPlan === "boolean") nextMulti[u.id] = u.multiBarberPlan ? "true" : "false";
+    }
+    setRoleDraftByUser(nextRole);
+    setHasPaidDraftByUser(nextPaid);
+    setMultiBarberDraftByUser(nextMulti);
   }, [pageData.items]);
 
   const sourceSwitching = source !== pageSource;
-  const wagooTableColSpan = 14;
+  const wagooTableColSpan = 12;
   const avendasTableColSpan = 7;
 
   return (
@@ -329,15 +443,13 @@ function AdminPage() {
         </div>
         {source === "wagoo" ? (
           <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
-            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — acesso</span>
+            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — planos</span>
             <span className="mx-1.5 text-muted-foreground">·</span>
-            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">Stripe</code> mostra{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">has_paid</code> (só leitura; webhook Stripe).
-            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> é o que a Wagoo usa na
-            prática. A coluna <span className="text-foreground">Origem do acesso</span> resume se vem de{" "}
-            <code className="text-[10px]">has_paid</code> (Stripe ou SQL), de cortesia por{" "}
-            <code className="text-[10px]">link</code> ou de cortesia só na base / painel — passe o rato para ver o
-            texto completo.
+            Na coluna <span className="text-foreground">Planos</span> escolha assinatura base, Multi-Barbeiro e
+            cortesia; clique em <span className="text-foreground">Aplicar planos</span>. O Stripe em produção
+            continua a sincronizar <code className="text-[10px]">has_paid</code>; aqui pode forçar manualmente.
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> reflecte o estado efectivo
+            (assinatura ou cortesia activa).
           </div>
         ) : null}
       </section>
@@ -383,9 +495,8 @@ function AdminPage() {
               <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Nome</th>
               {pageSource === "wagoo" ? (
                 <>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Stripe</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                    Multi-Barbeiro
+                  <th className="min-w-[220px] px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Planos
                   </th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Equipe</th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Acesso</th>
@@ -394,7 +505,6 @@ function AdminPage() {
                     Origem do acesso
                   </th>
                   <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Tempo restante</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ajustar cortesia</th>
                 </>
               ) : (
                 <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Role</th>
@@ -412,39 +522,24 @@ function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs">{u.name ?? "—"}</td>
                 {pageSource === "wagoo" ? (
                   <>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {typeof u.hasPaid === "boolean" ? (
-                        u.hasPaid ? (
-                          <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                            pago
-                          </span>
-                        ) : (
-                          <span className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-amber-200">
-                            não pago
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      <button
-                        type="button"
-                        className={`rounded border px-2 py-0.5 font-mono text-[10px] ${
-                          u.multiBarberPlan
-                            ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
-                            : "border-border text-muted-foreground"
-                        }`}
+                    <td className="px-3 py-2 align-top">
+                      <WagooPlanSelectors
+                        hasPaidValue={hasPaidDraftByUser[u.id] ?? ""}
+                        multiBarberValue={multiBarberDraftByUser[u.id] ?? ""}
+                        complimentaryValue={complimentaryDraftByUser[u.id] ?? ""}
                         disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                        onClick={() => void toggleWagooMultiBarber(u)}
-                        title="Alternar Plano Multi-Barbeiro (equipe + IA)"
-                      >
-                        {busyActionByUser[u.id] === "multiBarber"
-                          ? "…"
-                          : u.multiBarberPlan
-                            ? "premium"
-                            : "off"}
-                      </button>
+                        busy={busyActionByUser[u.id] === "planos"}
+                        onHasPaidChange={(value) =>
+                          setHasPaidDraftByUser((prev) => ({ ...prev, [u.id]: value }))
+                        }
+                        onMultiBarberChange={(value) =>
+                          setMultiBarberDraftByUser((prev) => ({ ...prev, [u.id]: value }))
+                        }
+                        onComplimentaryChange={(value) =>
+                          setComplimentaryDraftByUser((prev) => ({ ...prev, [u.id]: value }))
+                        }
+                        onApply={() => void applyWagooPlans(u)}
+                      />
                     </td>
                     <td className="px-3 py-2 text-center font-mono text-xs text-muted-foreground">
                       {u.barbeirosCount ?? 0}
@@ -477,36 +572,6 @@ function AdminPage() {
                     </td>
                     <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
                       {wagooFormatComplimentaryRemaining(u.complimentary_access_until)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-1">
-                        <select
-                          className="h-7 max-w-[200px] rounded border border-border bg-card px-2 font-mono text-[10px]"
-                          value={complimentaryDraftByUser[u.id] ?? ""}
-                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                          onChange={(e) =>
-                            setComplimentaryDraftByUser((prev) => ({
-                              ...prev,
-                              [u.id]: e.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">— escolher —</option>
-                          {WAGOO_COMPLIMENTARY_PRESETS.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="h-7 max-w-[200px] rounded border border-primary/50 px-2 font-mono text-[10px] text-primary hover:bg-primary/10"
-                          onClick={() => void applyWagooComplimentary(u)}
-                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                        >
-                          {busyActionByUser[u.id] === "complimentary" ? "aplicando…" : "Aplicar cortesia"}
-                        </button>
-                      </div>
                     </td>
                   </>
                 ) : (
