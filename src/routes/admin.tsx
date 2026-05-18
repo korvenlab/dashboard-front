@@ -23,18 +23,20 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
+/** Plano base Wagoo (landing + Stripe `has_paid`). */
 const WAGOO_SUBSCRIPTION_OPTIONS = [
-  { value: "false", label: "Sem assinatura (não pago)" },
-  { value: "true", label: "Assinatura Wagoo (pago)" },
+  { value: "false", label: "Revogar Plano Pro (has_paid)" },
+  { value: "true", label: "Activar Plano Pro — R$ 60/mês" },
 ] as const;
 
+/** Add-on opcional em cima do Pro (`multi_barber_plan`). */
 const WAGOO_MULTI_BARBER_OPTIONS = [
-  { value: "false", label: "Plano standard (1 profissional)" },
-  { value: "true", label: "Multi-Barbeiro (premium)" },
+  { value: "false", label: "Revogar add-on Multi-Barbeiro" },
+  { value: "true", label: "Activar add-on Multi-Barbeiro" },
 ] as const;
 
 const WAGOO_COMPLIMENTARY_PRESETS = [
-  { value: "", label: "— manter cortesia actual —" },
+  { value: "", label: "— não alterar cortesia —" },
   { value: "none", label: "Sem cortesia (revogar)" },
   { value: "7", label: "+7 dias" },
   { value: "30", label: "+30 dias" },
@@ -76,7 +78,36 @@ function stringifyUnknown(e: unknown): string {
   return String(e);
 }
 
+function WagooPlanStatusChip({
+  label,
+  active,
+  variant,
+}: {
+  label: string;
+  active: boolean;
+  variant: "pro" | "addon" | "cortesia";
+}) {
+  const activeClass =
+    variant === "addon"
+      ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+      : variant === "cortesia"
+        ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
+        : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  const inactiveClass = "border-border bg-muted/30 text-muted-foreground";
+
+  return (
+    <span
+      className={`inline-flex rounded border px-2 py-0.5 font-mono text-[10px] ${active ? activeClass : inactiveClass}`}
+    >
+      {label}: {active ? "ativo" : "inativo"}
+    </span>
+  );
+}
+
 type WagooPlanSelectorsProps = {
+  hasPaidCurrent?: boolean;
+  multiBarberCurrent?: boolean;
+  complimentaryActive?: boolean;
   hasPaidValue: string;
   multiBarberValue: string;
   complimentaryValue: string;
@@ -89,6 +120,9 @@ type WagooPlanSelectorsProps = {
 };
 
 function WagooPlanSelectors({
+  hasPaidCurrent,
+  multiBarberCurrent,
+  complimentaryActive,
   hasPaidValue,
   multiBarberValue,
   complimentaryValue,
@@ -100,19 +134,30 @@ function WagooPlanSelectors({
   onApply,
 }: WagooPlanSelectorsProps) {
   const selectClass =
-    "h-7 w-full max-w-[220px] rounded border border-border bg-card px-2 font-mono text-[10px]";
+    "h-7 w-full max-w-[240px] rounded border border-border bg-card px-2 font-mono text-[10px]";
 
   return (
-    <div className="flex min-w-[200px] flex-col gap-2">
+    <div className="flex min-w-[220px] flex-col gap-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        <WagooPlanStatusChip label="Plano Pro" active={hasPaidCurrent === true} variant="pro" />
+        <WagooPlanStatusChip
+          label="Multi-Barbeiro"
+          active={multiBarberCurrent === true}
+          variant="addon"
+        />
+        {complimentaryActive !== undefined ? (
+          <WagooPlanStatusChip label="Cortesia" active={complimentaryActive} variant="cortesia" />
+        ) : null}
+      </div>
       <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Assinatura Wagoo
+        Alterar Plano Pro
         <select
           className={selectClass}
           value={hasPaidValue}
           disabled={disabled}
           onChange={(e) => onHasPaidChange(e.target.value)}
         >
-          <option value="">— actual —</option>
+          <option value="">— não alterar —</option>
           {WAGOO_SUBSCRIPTION_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -121,14 +166,14 @@ function WagooPlanSelectors({
         </select>
       </label>
       <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Plano Multi-Barbeiro
+        Alterar add-on Multi-Barbeiro
         <select
           className={selectClass}
           value={multiBarberValue}
           disabled={disabled}
           onChange={(e) => onMultiBarberChange(e.target.value)}
         >
-          <option value="">— actual —</option>
+          <option value="">— não alterar —</option>
           {WAGOO_MULTI_BARBER_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -137,7 +182,7 @@ function WagooPlanSelectors({
         </select>
       </label>
       <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Cortesia (opcional)
+        Cortesia de acesso
         <select
           className={selectClass}
           value={complimentaryValue}
@@ -157,7 +202,7 @@ function WagooPlanSelectors({
         disabled={disabled}
         onClick={onApply}
       >
-        {busy ? "A guardar…" : "Aplicar planos"}
+        {busy ? "Salvando…" : "Aplicar alterações"}
       </button>
     </div>
   );
@@ -276,7 +321,7 @@ function AdminPage() {
           await patchAdminUserHasPaid({
             data: { source: "wagoo", id: user.id, hasPaid: wantPaid },
           });
-          changes.push(wantPaid ? "assinatura activa" : "assinatura revogada");
+          changes.push(wantPaid ? "Plano Pro activo" : "Plano Pro revogado");
         }
       }
 
@@ -392,16 +437,10 @@ function AdminPage() {
 
   useEffect(() => {
     const nextRole: Record<string, string> = {};
-    const nextPaid: Record<string, string> = {};
-    const nextMulti: Record<string, string> = {};
     for (const u of pageData.items) {
       nextRole[u.id] = u.role;
-      if (typeof u.hasPaid === "boolean") nextPaid[u.id] = u.hasPaid ? "true" : "false";
-      if (typeof u.multiBarberPlan === "boolean") nextMulti[u.id] = u.multiBarberPlan ? "true" : "false";
     }
     setRoleDraftByUser(nextRole);
-    setHasPaidDraftByUser(nextPaid);
-    setMultiBarberDraftByUser(nextMulti);
   }, [pageData.items]);
 
   const sourceSwitching = source !== pageSource;
@@ -445,11 +484,12 @@ function AdminPage() {
           <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
             <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — planos</span>
             <span className="mx-1.5 text-muted-foreground">·</span>
-            Na coluna <span className="text-foreground">Planos</span> escolha assinatura base, Multi-Barbeiro e
-            cortesia; clique em <span className="text-foreground">Aplicar planos</span>. O Stripe em produção
-            continua a sincronizar <code className="text-[10px]">has_paid</code>; aqui pode forçar manualmente.
-            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px]">Acesso</code> reflecte o estado efectivo
-            (assinatura ou cortesia activa).
+            <strong className="text-foreground">Plano Pro</strong> (R$ 60/mês,{" "}
+            <code className="text-[10px]">has_paid</code>) é o plano base.{" "}
+            <strong className="text-foreground">Multi-Barbeiro</strong> é add-on opcional (
+            <code className="text-[10px]">multi_barber_plan</code>). Chips mostram o estado actual; nos selects
+            escolha só o que quiser mudar e clique em{" "}
+            <span className="text-foreground">Aplicar alterações</span>.
           </div>
         ) : null}
       </section>
@@ -524,6 +564,9 @@ function AdminPage() {
                   <>
                     <td className="px-3 py-2 align-top">
                       <WagooPlanSelectors
+                        hasPaidCurrent={u.hasPaid}
+                        multiBarberCurrent={u.multiBarberPlan}
+                        complimentaryActive={wagooComplimentaryIsActive(u.complimentary_access_until)}
                         hasPaidValue={hasPaidDraftByUser[u.id] ?? ""}
                         multiBarberValue={multiBarberDraftByUser[u.id] ?? ""}
                         complimentaryValue={complimentaryDraftByUser[u.id] ?? ""}
