@@ -21,6 +21,9 @@ export type AdminUser = {
   accessOriginSummary?: string;
   /** Wagoo: texto longo (tooltip) explicando os canais. */
   accessOriginDetail?: string;
+  /** Wagoo: basic | pro | pro_plus */
+  subscriptionTier?: "basic" | "pro" | "pro_plus" | null;
+  subscription_tier?: "basic" | "pro" | "pro_plus" | null;
   /** Wagoo: add-on Plano Multi-Barbeiro (`profiles.multi_barber_plan`). */
   multiBarberPlan?: boolean;
   multi_barber_plan?: boolean;
@@ -345,6 +348,14 @@ function normalizeUser(raw: unknown): AdminUser | null {
   if (typeof r.complimentaryViaLink === "boolean") out.complimentaryViaLink = r.complimentaryViaLink;
   if (typeof r.accessOriginSummary === "string") out.accessOriginSummary = r.accessOriginSummary;
   if (typeof r.accessOriginDetail === "string") out.accessOriginDetail = r.accessOriginDetail;
+  const tierRaw = r.subscriptionTier ?? r.subscription_tier;
+  if (tierRaw === "basic" || tierRaw === "pro" || tierRaw === "pro_plus") {
+    out.subscriptionTier = tierRaw;
+    out.subscription_tier = tierRaw;
+  } else if (tierRaw === null) {
+    out.subscriptionTier = null;
+    out.subscription_tier = null;
+  }
   const multiBarberPlan = extractMultiBarberPlanFromUserPayload(r);
   if (multiBarberPlan !== undefined) {
     out.multiBarberPlan = multiBarberPlan;
@@ -606,6 +617,27 @@ export const patchWagooUserComplimentaryAccess = createServerFn({ method: "POST"
     );
     const root = asRecord(raw);
     return normalizeUser(root?.data ?? { id: data.id });
+  }) as any);
+
+const wagooSubscriptionTierSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  subscriptionTier: z.enum(["basic", "pro", "pro_plus"]).nullable(),
+});
+
+/** Wagoo: define plano (basic | pro | pro_plus) ou revoga com null. */
+export const patchWagooUserSubscriptionTier = createServerFn({ method: "POST" })
+  .inputValidator(wagooSubscriptionTierSchema)
+  .handler((async (ctx: unknown): Promise<AdminUser | null> => {
+    const { data } = ctx as { data: z.infer<typeof wagooSubscriptionTierSchema> };
+    const raw = await callAdminApi(
+      data.source,
+      "POST",
+      `/api/admin/users/${encodeURIComponent(data.id)}/subscription-tier`,
+      { subscriptionTier: data.subscriptionTier },
+    );
+    const root = asRecord(raw);
+    return normalizeUser(root?.data ?? { id: data.id, subscriptionTier: data.subscriptionTier });
   }) as any);
 
 /** Wagoo: activa ou revoga Plano Multi-Barbeiro (`multi_barber_plan`). */

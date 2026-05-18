@@ -5,11 +5,10 @@ import {
   fetchAdminUserAssets,
   fetchAdminRoles,
   fetchAdminUsers,
-  patchAdminUserHasPaid,
   patchAdminUserRole,
   patchAdminUserStatus,
   patchWagooUserComplimentaryAccess,
-  patchWagooUserMultiBarberPlan,
+  patchWagooUserSubscriptionTier,
   wagooComplimentaryIsActive,
   wagooFormatComplimentaryRemaining,
   type AdminRoleOption,
@@ -23,16 +22,11 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-/** Plano base Wagoo (landing + Stripe `has_paid`). */
-const WAGOO_SUBSCRIPTION_OPTIONS = [
-  { value: "false", label: "Revogar Plano Pro (has_paid)" },
-  { value: "true", label: "Activar Plano Pro — R$ 60/mês" },
-] as const;
-
-/** Add-on opcional em cima do Pro (`multi_barber_plan`). */
-const WAGOO_MULTI_BARBER_OPTIONS = [
-  { value: "false", label: "Revogar add-on Multi-Barbeiro" },
-  { value: "true", label: "Activar add-on Multi-Barbeiro" },
+const WAGOO_TIER_OPTIONS = [
+  { value: "basic", label: "Basic — R$ 59 (1 usuário)" },
+  { value: "pro", label: "Pro — R$ 149 (até 3 usuários)" },
+  { value: "pro_plus", label: "Pro+ — R$ 259 (até 5 usuários)" },
+  { value: "none", label: "Revogar plano (sem assinatura)" },
 ] as const;
 
 const WAGOO_COMPLIMENTARY_PRESETS = [
@@ -104,77 +98,64 @@ function WagooPlanStatusChip({
   );
 }
 
+const TIER_CHIP_LABEL: Record<string, string> = {
+  basic: "Basic",
+  pro: "Pro",
+  pro_plus: "Pro+",
+};
+
 type WagooPlanSelectorsProps = {
-  hasPaidCurrent?: boolean;
-  multiBarberCurrent?: boolean;
+  subscriptionTierCurrent?: string | null;
   complimentaryActive?: boolean;
-  hasPaidValue: string;
-  multiBarberValue: string;
+  tierValue: string;
   complimentaryValue: string;
   disabled: boolean;
   busy: boolean;
-  onHasPaidChange: (value: string) => void;
-  onMultiBarberChange: (value: string) => void;
+  onTierChange: (value: string) => void;
   onComplimentaryChange: (value: string) => void;
   onApply: () => void;
 };
 
 function WagooPlanSelectors({
-  hasPaidCurrent,
-  multiBarberCurrent,
+  subscriptionTierCurrent,
   complimentaryActive,
-  hasPaidValue,
-  multiBarberValue,
+  tierValue,
   complimentaryValue,
   disabled,
   busy,
-  onHasPaidChange,
-  onMultiBarberChange,
+  onTierChange,
   onComplimentaryChange,
   onApply,
 }: WagooPlanSelectorsProps) {
   const selectClass =
     "h-7 w-full max-w-[240px] rounded border border-border bg-card px-2 font-mono text-[10px]";
 
+  const tierLabel = subscriptionTierCurrent
+    ? TIER_CHIP_LABEL[subscriptionTierCurrent] ?? subscriptionTierCurrent
+    : "Sem plano";
+
   return (
     <div className="flex min-w-[220px] flex-col gap-2.5">
       <div className="flex flex-wrap gap-1.5">
-        <WagooPlanStatusChip label="Plano Pro" active={hasPaidCurrent === true} variant="pro" />
         <WagooPlanStatusChip
-          label="Multi-Barbeiro"
-          active={multiBarberCurrent === true}
-          variant="addon"
+          label={tierLabel}
+          active={Boolean(subscriptionTierCurrent)}
+          variant="pro"
         />
         {complimentaryActive !== undefined ? (
           <WagooPlanStatusChip label="Cortesia" active={complimentaryActive} variant="cortesia" />
         ) : null}
       </div>
       <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Alterar Plano Pro
+        Alterar plano Wagoo
         <select
           className={selectClass}
-          value={hasPaidValue}
+          value={tierValue}
           disabled={disabled}
-          onChange={(e) => onHasPaidChange(e.target.value)}
+          onChange={(e) => onTierChange(e.target.value)}
         >
           <option value="">— não alterar —</option>
-          {WAGOO_SUBSCRIPTION_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Alterar add-on Multi-Barbeiro
-        <select
-          className={selectClass}
-          value={multiBarberValue}
-          disabled={disabled}
-          onChange={(e) => onMultiBarberChange(e.target.value)}
-        >
-          <option value="">— não alterar —</option>
-          {WAGOO_MULTI_BARBER_OPTIONS.map((o) => (
+          {WAGOO_TIER_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
@@ -226,8 +207,7 @@ function AdminPage() {
   const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
   const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
   const [busyActionByUser, setBusyActionByUser] = useState<Record<string, string>>({});
-  const [hasPaidDraftByUser, setHasPaidDraftByUser] = useState<Record<string, string>>({});
-  const [multiBarberDraftByUser, setMultiBarberDraftByUser] = useState<Record<string, string>>({});
+  const [tierDraftByUser, setTierDraftByUser] = useState<Record<string, string>>({});
   const [complimentaryDraftByUser, setComplimentaryDraftByUser] = useState<Record<string, string>>({});
 
   function setUserBusy(userId: string, label: string) {
@@ -253,8 +233,7 @@ function AdminPage() {
       })) as { items: AdminUser[]; page: number; limit: number; total: number };
       setPageData(data);
       setPageSource(targetSource);
-      setHasPaidDraftByUser({});
-      setMultiBarberDraftByUser({});
+      setTierDraftByUser({});
       setComplimentaryDraftByUser({});
       setAssets(null);
     } catch (e) {
@@ -301,11 +280,10 @@ function AdminPage() {
   }
 
   async function applyWagooPlans(user: AdminUser) {
-    const subDraft = hasPaidDraftByUser[user.id];
-    const multiDraft = multiBarberDraftByUser[user.id];
+    const tierDraft = tierDraftByUser[user.id]?.trim() ?? "";
     const cortesiaDraft = complimentaryDraftByUser[user.id]?.trim() ?? "";
 
-    if (!subDraft && !multiDraft && !cortesiaDraft) {
+    if (!tierDraft && !cortesiaDraft) {
       setMessage("Seleccione pelo menos um plano para alterar.");
       return;
     }
@@ -315,23 +293,21 @@ function AdminPage() {
     const changes: string[] = [];
 
     try {
-      if (subDraft === "true" || subDraft === "false") {
-        const wantPaid = subDraft === "true";
-        if (wantPaid !== (user.hasPaid === true)) {
-          await patchAdminUserHasPaid({
-            data: { source: "wagoo", id: user.id, hasPaid: wantPaid },
+      if (tierDraft) {
+        const wantTier =
+          tierDraft === "none"
+            ? null
+            : (tierDraft as "basic" | "pro" | "pro_plus");
+        const current = user.subscriptionTier ?? user.subscription_tier ?? null;
+        if (wantTier !== current) {
+          await patchWagooUserSubscriptionTier({
+            data: { source: "wagoo", id: user.id, subscriptionTier: wantTier },
           });
-          changes.push(wantPaid ? "Plano Pro activo" : "Plano Pro revogado");
-        }
-      }
-
-      if (multiDraft === "true" || multiDraft === "false") {
-        const wantMulti = multiDraft === "true";
-        if (wantMulti !== (user.multiBarberPlan === true)) {
-          await patchWagooUserMultiBarberPlan({
-            data: { source: "wagoo", id: user.id, multiBarberPlan: wantMulti },
-          });
-          changes.push(wantMulti ? "Multi-Barbeiro activo" : "Multi-Barbeiro desactivado");
+          changes.push(
+            wantTier
+              ? `${TIER_CHIP_LABEL[wantTier] ?? wantTier} activo`
+              : "plano revogado",
+          );
         }
       }
 
@@ -484,11 +460,10 @@ function AdminPage() {
           <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
             <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — planos</span>
             <span className="mx-1.5 text-muted-foreground">·</span>
-            <strong className="text-foreground">Plano Pro</strong> (R$ 60/mês,{" "}
-            <code className="text-[10px]">has_paid</code>) é o plano base.{" "}
-            <strong className="text-foreground">Multi-Barbeiro</strong> é add-on opcional (
-            <code className="text-[10px]">multi_barber_plan</code>). Chips mostram o estado actual; nos selects
-            escolha só o que quiser mudar e clique em{" "}
+            Planos: <strong className="text-foreground">Basic</strong> (1 usuário, R$ 59),{" "}
+            <strong className="text-foreground">Pro</strong> (até 3, R$ 149),{" "}
+            <strong className="text-foreground">Pro+</strong> (até 5, R$ 259). Chips mostram o plano actual; nos
+            selects escolha só o que quiser mudar e clique em{" "}
             <span className="text-foreground">Aplicar alterações</span>.
           </div>
         ) : null}
@@ -564,19 +539,14 @@ function AdminPage() {
                   <>
                     <td className="px-3 py-2 align-top">
                       <WagooPlanSelectors
-                        hasPaidCurrent={u.hasPaid}
-                        multiBarberCurrent={u.multiBarberPlan}
+                        subscriptionTierCurrent={u.subscriptionTier ?? u.subscription_tier}
                         complimentaryActive={wagooComplimentaryIsActive(u.complimentary_access_until)}
-                        hasPaidValue={hasPaidDraftByUser[u.id] ?? ""}
-                        multiBarberValue={multiBarberDraftByUser[u.id] ?? ""}
+                        tierValue={tierDraftByUser[u.id] ?? ""}
                         complimentaryValue={complimentaryDraftByUser[u.id] ?? ""}
                         disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
                         busy={busyActionByUser[u.id] === "planos"}
-                        onHasPaidChange={(value) =>
-                          setHasPaidDraftByUser((prev) => ({ ...prev, [u.id]: value }))
-                        }
-                        onMultiBarberChange={(value) =>
-                          setMultiBarberDraftByUser((prev) => ({ ...prev, [u.id]: value }))
+                        onTierChange={(value) =>
+                          setTierDraftByUser((prev) => ({ ...prev, [u.id]: value }))
                         }
                         onComplimentaryChange={(value) =>
                           setComplimentaryDraftByUser((prev) => ({ ...prev, [u.id]: value }))
