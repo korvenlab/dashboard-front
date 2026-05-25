@@ -2,19 +2,19 @@ import { createFileRoute } from "@tanstack/react-router";
 import { KpiCard } from "@/components/kpi-card";
 import { RevenueAreaChart, VolumeBarChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
-import { useRootLoaderData } from "@/hooks/use-root-loader-data";
+import { KorvenDashboardEmptyHint, useKorvenDashboard } from "@/lib/dashboard-context";
 
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
 function Index() {
-  const { dashboard } = useRootLoaderData();
+  const { dashboard } = useKorvenDashboard();
 
   if (!dashboard) {
     return (
-      <div className="p-10 font-mono text-sm text-muted-foreground">
-        Abra uma rota de dashboard para ver as métricas.
+      <div className="p-10">
+        <KorvenDashboardEmptyHint />
       </div>
     );
   }

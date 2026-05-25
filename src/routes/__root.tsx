@@ -12,9 +12,8 @@ import appCss from "../styles.css?url";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
-import { fetchKorvenDashboard } from "@/lib/dashboard-api";
+import { KorvenDashboardProvider, useKorvenDashboard } from "@/lib/dashboard-context";
 import { parseRootSearch } from "@/lib/root-search";
-import type { DashboardViewModel } from "@/lib/dashboard-view";
 import type { RootLoaderData } from "@/lib/root-loader-data";
 
 const LOGIN_USER = "admin";
@@ -150,21 +149,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   validateSearch: (search) => parseRootSearch(search as Record<string, unknown>),
-  loaderDeps: ({ search }) => ({ search }),
-  staleTime: 30_000,
-  loader: async ({ deps }): Promise<RootLoaderData> => {
-    const { organization_id, period_days, chart_days } = deps.search;
-
-    const dashboard = (await fetchKorvenDashboard({
-      data: {
-        organization_id,
-        period_days,
-        chart_days,
-      },
-    })) as DashboardViewModel;
-
-    return { dashboard };
-  },
+  loader: async (): Promise<RootLoaderData> => ({ dashboard: null }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -220,7 +205,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const { dashboard } = Route.useLoaderData();
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -238,31 +222,37 @@ function RootComponent() {
     setAuthenticated(false);
   };
 
-  const banner = dashboard?.meta.message?.trim() ? dashboard.meta.message : null;
-
   if (!authenticated) return loginView;
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background text-foreground">
-          <AppSidebar dynamicItems={dashboard?.ui.sidebar_itens} onLogout={handleLogout} />
-          <div className="flex min-h-screen flex-1 flex-col">
-            <DashboardTopbar
-              generatedAt={dashboard?.meta.gerado_em}
-              topbarUi={dashboard?.ui.topbar}
-            />
-            {banner ? (
-              <div className="border-b border-chart-4/50 bg-chart-4/10 px-4 py-2 font-mono text-[11px] text-chart-4">
-                {banner}
-              </div>
-            ) : null}
-            <main className="flex-1 bg-background">
-              <Outlet />
-            </main>
-          </div>
-        </div>
-      </SidebarProvider>
+      <KorvenDashboardProvider>
+        <AuthenticatedShell onLogout={handleLogout} />
+      </KorvenDashboardProvider>
     </QueryClientProvider>
+  );
+}
+
+function AuthenticatedShell({ onLogout }: { onLogout: () => void }) {
+  const { dashboard } = useKorvenDashboard();
+  const banner = dashboard?.meta.message?.trim() ? dashboard.meta.message : null;
+
+  return (
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-background text-foreground">
+        <AppSidebar dynamicItems={dashboard?.ui.sidebar_itens} onLogout={onLogout} />
+        <div className="flex min-h-screen flex-1 flex-col">
+          <DashboardTopbar />
+          {banner ? (
+            <div className="border-b border-chart-4/50 bg-chart-4/10 px-4 py-2 font-mono text-[11px] text-chart-4">
+              {banner}
+            </div>
+          ) : null}
+          <main className="flex-1 bg-background">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }

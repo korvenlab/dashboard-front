@@ -13,6 +13,8 @@ const dashboardQuerySchema = z.object({
   period_days: z.number().min(1).max(366).optional(),
   /** Eixo dos gráficos: Wagoo e 2AVendas aceitam tipicamente até 90 dias. */
   chart_days: z.number().min(1).max(90).optional(),
+  /** Ignora cache do agregador (wag-backend + 2A-back). */
+  force_refresh: z.boolean().optional(),
 });
 
 export type DashboardQueryInput = z.infer<typeof dashboardQuerySchema>;
@@ -67,6 +69,7 @@ export const fetchKorvenDashboard = createServerFn({ method: "GET" })
     url.searchParams.set("period_days", String(filtros.period_days));
     url.searchParams.set("chart_days", String(filtros.chart_days));
     if (filtros.organization_id) url.searchParams.set("organization_id", filtros.organization_id);
+    if (data.force_refresh) url.searchParams.set("refresh", "1");
 
     try {
       const res = await fetch(url.toString(), {

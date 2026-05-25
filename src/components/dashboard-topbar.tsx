@@ -1,4 +1,4 @@
-import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, RefreshCw } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Select,
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter, useRouterState, useSearch } from "@tanstack/react-router";
-import type { DashboardUiConfig } from "@/lib/dashboard-view";
+import { useKorvenDashboard } from "@/lib/dashboard-context";
 import type { RootSearch } from "@/lib/root-search";
 
 const PERIODS = [
@@ -42,15 +42,11 @@ const ORGS = [
   },
 ];
 
-type Props = {
-  generatedAt?: string;
-  topbarUi?: DashboardUiConfig["topbar"];
-};
-
-export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
+export function DashboardTopbar() {
   const search = useSearch({ from: "__root__" }) as RootSearch;
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const { dashboard, loading, refresh, loadedOnce } = useKorvenDashboard();
 
   const organization_id = search.organization_id;
   const period_days = search.period_days ?? 30;
@@ -69,8 +65,9 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
   const periodLabel =
     PERIODS.find((p) => p.days === period_days)?.label ?? `Últimos ${period_days} dias`;
 
-  const remoteTitle = topbarUi?.title ?? "";
-  const remoteSubtitle = topbarUi?.subtitle ?? "";
+  const remoteTitle = dashboard?.ui.topbar?.title ?? "";
+  const remoteSubtitle = dashboard?.ui.topbar?.subtitle ?? "";
+  const generatedAt = dashboard?.meta.gerado_em;
 
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-3 border-b border-border bg-background/90 px-4 py-2 backdrop-blur">
@@ -150,17 +147,24 @@ export function DashboardTopbar({ generatedAt, topbarUi }: Props) {
       )}
 
       <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-        {generatedAt ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
+          title="Busca métricas de Wagoo e 2AVendas (dashboard-back)"
+          disabled={loading}
+          onClick={() => void refresh()}
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Carregando…" : "Atualizar"}
+        </Button>
+        {generatedAt && loadedOnce ? (
           <span className="hidden lg:inline" title="gerado_em (API)">
             api {generatedAt}
           </span>
         ) : (
-          <span className="hidden md:inline">build 2026.05.07</span>
+          <span className="hidden md:inline text-muted-foreground/80">sem dados</span>
         )}
-        <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 animate-pulse bg-primary shadow-[0_0_8px_var(--neon-cyan)]" />
-          live
-        </span>
       </div>
     </header>
   );

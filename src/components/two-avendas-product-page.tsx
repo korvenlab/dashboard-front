@@ -3,14 +3,16 @@ import { VolumeBarChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
 import { TwoAvendasBillingUnlockCard } from "@/components/two-avendas-billing-unlock-card";
 import { TwoAvendasPromoLinksPanel } from "@/components/two-avendas-promo-links-panel";
-import { useRootLoaderData } from "@/hooks/use-root-loader-data";
+import { KorvenDashboardEmptyHint, useKorvenDashboard } from "@/lib/dashboard-context";
 
 export function TwoAvendasProductPage() {
-  const { dashboard } = useRootLoaderData();
+  const { dashboard } = useKorvenDashboard();
 
   if (!dashboard) {
     return (
-      <div className="p-6 font-mono text-sm text-muted-foreground">Métricas indisponíveis nesta rota.</div>
+      <div className="p-6">
+        <KorvenDashboardEmptyHint />
+      </div>
     );
   }
 

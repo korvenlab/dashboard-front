@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { KpiCard } from "@/components/kpi-card";
 import { RevenueAreaChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
-import { useRootLoaderData } from "@/hooks/use-root-loader-data";
+import { KorvenDashboardEmptyHint, useKorvenDashboard } from "@/lib/dashboard-context";
 import {
   createWagooPromoLink,
   deleteWagooPromoLink,
@@ -305,11 +305,13 @@ function WagooPromoLinksPanel() {
 }
 
 function WagooPage() {
-  const { dashboard } = useRootLoaderData();
+  const { dashboard } = useKorvenDashboard();
 
   if (!dashboard) {
     return (
-      <div className="p-6 font-mono text-sm text-muted-foreground">Métricas indisponíveis nesta rota.</div>
+      <div className="p-6">
+        <KorvenDashboardEmptyHint />
+      </div>
     );
   }
 

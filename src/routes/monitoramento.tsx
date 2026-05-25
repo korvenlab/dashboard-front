@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchUptimeMonitoring, type UptimeMonitoringResponse } from "@/lib/monitoring-api";
 
@@ -32,16 +32,23 @@ function latestResponseMs(responseTimes: unknown[]): number | null {
 }
 
 function MonitoringPage() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<UptimeMonitoringResponse | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
 
-  const load = async () => {
+  const load = async (opts?: { force_refresh?: boolean; full?: boolean }) => {
     setLoading(true);
     setError("");
     try {
-      const result = (await fetchUptimeMonitoring({ data: {} })) as UptimeMonitoringResponse;
+      const result = (await fetchUptimeMonitoring({
+        data: {
+          force_refresh: opts?.force_refresh,
+          full: opts?.full,
+        },
+      })) as UptimeMonitoringResponse;
       setData(result);
+      setLoadedOnce(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setData(null);
@@ -50,33 +57,47 @@ function MonitoringPage() {
     }
   };
 
-  useEffect(() => {
-    void load();
-  }, []);
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Monitoramento</h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
-            Visão completa dos monitores via API do UptimeRobot.
+            Dados via UptimeRobot (cache ~10 min no servidor). Carregue só quando precisar — não impacta 2AVendas nem
+            Wagoo.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded border border-border px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:bg-card"
-          disabled={loading}
-        >
-          {loading ? "Atualizando..." : "Atualizar"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void load({ force_refresh: false })}
+            className="rounded border border-border px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:bg-card"
+            disabled={loading}
+          >
+            {loading ? "Carregando..." : loadedOnce ? "Recarregar (cache)" : "Carregar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void load({ force_refresh: true, full: true })}
+            className="rounded border border-primary/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-primary hover:bg-primary/10"
+            disabled={loading}
+            title="Consulta completa UptimeRobot (logs e latência)"
+          >
+            Atualizar tudo
+          </button>
+        </div>
       </div>
 
       {error ? (
         <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-300">
           {error}
         </div>
+      ) : null}
+
+      {!loadedOnce && !loading ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          Clique em Carregar para ver os monitores. A página não busca dados automaticamente.
+        </p>
       ) : null}
 
       {data ? (
@@ -132,7 +153,7 @@ function MonitoringPage() {
                 );
               })()
             ))}
-            {!loading && (!data || data.monitors.length === 0) ? (
+            {!loading && loadedOnce && (!data || data.monitors.length === 0) ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center font-mono text-xs text-muted-foreground">
                   Nenhum monitor retornado pela API.
