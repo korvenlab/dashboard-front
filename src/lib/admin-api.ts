@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { getTwoAvendasServerEnv, getTwoAvendasBillingAdminSecret, getWagooServerEnv } from "@/lib/server-env";
 
@@ -455,7 +455,7 @@ async function callAdminApi(
   return json;
 }
 
-export const fetchAdminUsers = createServerFn({ method: "GET" })
+export const fetchAdminUsers = protectedServerFn("GET")
   .inputValidator(listSchema)
   .handler((async (ctx: unknown): Promise<AdminUsersPage> => {
     const { data } = ctx as { data: z.infer<typeof listSchema> };
@@ -476,7 +476,7 @@ export const fetchAdminUsers = createServerFn({ method: "GET" })
     };
   }) as any);
 
-export const fetchAdminRoles = createServerFn({ method: "GET" })
+export const fetchAdminRoles = protectedServerFn("GET")
   .inputValidator(z.object({ source: sourceSchema }))
   .handler((async (ctx: unknown): Promise<AdminRolesResult> => {
     const { data } = ctx as { data: { source: AdminSource } };
@@ -534,7 +534,7 @@ export const fetchAdminRoles = createServerFn({ method: "GET" })
     };
   }) as any);
 
-export const fetchAdminUser = createServerFn({ method: "GET" })
+export const fetchAdminUser = protectedServerFn("GET")
   .inputValidator(byIdSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof byIdSchema> };
@@ -543,7 +543,7 @@ export const fetchAdminUser = createServerFn({ method: "GET" })
     return normalizeUser(root?.data ?? null);
   }) as any);
 
-export const fetchAdminUserAssets = createServerFn({ method: "GET" })
+export const fetchAdminUserAssets = protectedServerFn("GET")
   .inputValidator(byIdSchema)
   .handler((async (ctx: unknown): Promise<AdminUserAsset[]> => {
     const { data } = ctx as { data: z.infer<typeof byIdSchema> };
@@ -554,7 +554,7 @@ export const fetchAdminUserAssets = createServerFn({ method: "GET" })
     return itemsRaw.map(normalizeAsset).filter((x): x is AdminUserAsset => !!x);
   }) as any);
 
-export const patchAdminUserRole = createServerFn({ method: "POST" })
+export const patchAdminUserRole = protectedServerFn("POST")
   .inputValidator(roleSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof roleSchema> };
@@ -568,7 +568,7 @@ export const patchAdminUserRole = createServerFn({ method: "POST" })
     return normalizeUser(root?.data ?? { id: data.id, role: data.role });
   }) as any);
 
-export const patchAdminUserStatus = createServerFn({ method: "POST" })
+export const patchAdminUserStatus = protectedServerFn("POST")
   .inputValidator(statusSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof statusSchema> };
@@ -583,7 +583,7 @@ export const patchAdminUserStatus = createServerFn({ method: "POST" })
   }) as any);
 
 /** Wagoo: PATCH `/api/admin/users/:id/has-paid` → atualiza `profiles.has_paid` (Stripe webhook também escreve na coluna). */
-export const patchAdminUserHasPaid = createServerFn({ method: "POST" })
+export const patchAdminUserHasPaid = protectedServerFn("POST")
   .inputValidator(wagooHasPaidSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof wagooHasPaidSchema> };
@@ -605,7 +605,7 @@ const wagooComplimentaryAccessSchema = z.object({
 });
 
 /** Wagoo: cortesia administrativa (`complimentary_access_until`); não altera Stripe (`has_paid`). POST evita proxy que bloqueia PATCH. */
-export const patchWagooUserComplimentaryAccess = createServerFn({ method: "POST" })
+export const patchWagooUserComplimentaryAccess = protectedServerFn("POST")
   .inputValidator(wagooComplimentaryAccessSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof wagooComplimentaryAccessSchema> };
@@ -626,7 +626,7 @@ const wagooSubscriptionTierSchema = z.object({
 });
 
 /** Wagoo: define plano (basic | pro | pro_plus) ou revoga com null. */
-export const patchWagooUserSubscriptionTier = createServerFn({ method: "POST" })
+export const patchWagooUserSubscriptionTier = protectedServerFn("POST")
   .inputValidator(wagooSubscriptionTierSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof wagooSubscriptionTierSchema> };
@@ -641,7 +641,7 @@ export const patchWagooUserSubscriptionTier = createServerFn({ method: "POST" })
   }) as any);
 
 /** Wagoo: activa ou revoga Plano Multi-Barbeiro (`multi_barber_plan`). */
-export const patchWagooUserMultiBarberPlan = createServerFn({ method: "POST" })
+export const patchWagooUserMultiBarberPlan = protectedServerFn("POST")
   .inputValidator(wagooMultiBarberPlanSchema)
   .handler((async (ctx: unknown): Promise<AdminUser | null> => {
     const { data } = ctx as { data: z.infer<typeof wagooMultiBarberPlanSchema> };
@@ -668,7 +668,7 @@ export type WagooPromoLink = {
   signup_url?: string;
 };
 
-export const fetchWagooPromoLinks = createServerFn({ method: "GET" })
+export const fetchWagooPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({ source: z.literal("wagoo") }))
   .handler((async (ctx: unknown): Promise<WagooPromoLink[]> => {
     const { data } = ctx as { data: { source: "wagoo" } };
@@ -687,7 +687,7 @@ const createPromoSchema = z.object({
   expires_at: z.string().optional().nullable(),
 });
 
-export const createWagooPromoLink = createServerFn({ method: "POST" })
+export const createWagooPromoLink = protectedServerFn("POST")
   .inputValidator(createPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createPromoSchema> };
@@ -707,7 +707,7 @@ const patchPromoSchema = z.object({
   is_active: z.boolean(),
 });
 
-export const patchWagooPromoLinkActive = createServerFn({ method: "POST" })
+export const patchWagooPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchPromoSchema> };
@@ -726,7 +726,7 @@ const deletePromoSchema = z.object({
   id: z.string().min(1),
 });
 
-export const deleteWagooPromoLink = createServerFn({ method: "POST" })
+export const deleteWagooPromoLink = protectedServerFn("POST")
   .inputValidator(deletePromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deletePromoSchema> };
@@ -743,7 +743,7 @@ export const deleteWagooPromoLink = createServerFn({ method: "POST" })
     };
   }) as any);
 
-export const deleteAdminUser = createServerFn({ method: "POST" })
+export const deleteAdminUser = protectedServerFn("POST")
   .inputValidator(byIdSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof byIdSchema> };
@@ -762,7 +762,7 @@ const mint2AvendasUnlockSchema = z.object({
 });
 
 /** Chama 2A-back `POST /api/billing/organization-access-link` (fluxo tipo link Wagoo / liberação sem Stripe). */
-export const mintTwoAvendasOrgAccessLink = createServerFn({ method: "POST" })
+export const mintTwoAvendasOrgAccessLink = protectedServerFn("POST")
   .inputValidator(mint2AvendasUnlockSchema)
   .handler(
     (async (
@@ -854,7 +854,7 @@ async function twoAvendasBillingRequest(
   return root ?? {};
 }
 
-export const fetchTwoAvendasPromoLinks = createServerFn({ method: "GET" })
+export const fetchTwoAvendasPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({}))
   .handler((async (): Promise<TwoAvendasPromoLink[]> => {
     const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
@@ -869,7 +869,7 @@ const createTwoAvendasPromoSchema = z.object({
   max_redemptions: z.number().int().min(1).optional().nullable(),
 });
 
-export const createTwoAvendasPromoLink = createServerFn({ method: "POST" })
+export const createTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(createTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createTwoAvendasPromoSchema> };
@@ -886,7 +886,7 @@ const patchTwoAvendasPromoSchema = z.object({
   is_active: z.boolean(),
 });
 
-export const patchTwoAvendasPromoLinkActive = createServerFn({ method: "POST" })
+export const patchTwoAvendasPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchTwoAvendasPromoSchema> };
@@ -902,7 +902,7 @@ const deleteTwoAvendasPromoSchema = z.object({
   id: z.string().uuid(),
 });
 
-export const deleteTwoAvendasPromoLink = createServerFn({ method: "POST" })
+export const deleteTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(deleteTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deleteTwoAvendasPromoSchema> };

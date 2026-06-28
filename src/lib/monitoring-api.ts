@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { getDashboardBackendEnv } from "@/lib/server-env";
 
@@ -43,14 +43,14 @@ const monitoringQuerySchema = z.object({
   full: z.boolean().optional(),
 });
 
-export const fetchUptimeMonitoring = createServerFn({ method: "GET" })
+export const fetchUptimeMonitoring = protectedServerFn("GET")
   .inputValidator(monitoringQuerySchema)
   .handler((async (ctx: unknown): Promise<UptimeMonitoringResponse> => {
     const { data } = ctx as { data: z.infer<typeof monitoringQuerySchema> };
     const env = getDashboardBackendEnv();
     const base = env.apiBaseUrl?.trim();
     const key = env.metricsApiKey?.trim();
-    if (!base) throw new Error("DASHBOARD_BACKEND_BASE_URL ausente no servidor.");
+    if (!base) throw new Error("Monitoramento indisponível no servidor.");
 
     const url = new URL(`${base.replace(/\/+$/, "")}/monitoring/uptimerobot`);
     if (data.force_refresh) url.searchParams.set("refresh", "1");

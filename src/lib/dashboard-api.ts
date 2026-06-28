@@ -1,5 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
-import { setResponseHeaders } from "@tanstack/react-start/server";
+import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { buildFallbackDashboardViewModel, type DashboardViewModel } from "@/lib/dashboard-view";
 import { fetchStripeDashboard } from "@/lib/stripe/metrics";
@@ -21,15 +20,10 @@ type FetchDashboardInputCtx = { data: DashboardQueryInput };
  * Métricas Korven (Wagoo + 2AVENDAS) direto da Stripe — backend integrado ao dashboard-front.
  * Chamado somente ao clicar em Atualizar no topbar.
  */
-export const fetchKorvenDashboard = createServerFn({ method: "GET" })
+export const fetchKorvenDashboard = protectedServerFn("GET")
   .inputValidator(dashboardQuerySchema)
   .handler((async (ctx: unknown): Promise<DashboardViewModel> => {
     const { data } = ctx as FetchDashboardInputCtx;
-    setResponseHeaders(
-      new Headers({
-        "Cache-Control": "private, no-store",
-      }),
-    );
 
     const filtros = {
       organization_id: data.organization_id,

@@ -292,8 +292,7 @@ function WagooPromoLinksPanel() {
             {!items.length && !loading ? (
               <tr>
                 <td colSpan={6} className="p-3 text-muted-foreground">
-                  Nenhum link (ou erro ao carregar — verifique WAGOO_API_BASE_URL e ADMIN_API_SECRET ou
-                  WAGOO_METRICS_API_KEY no servidor do dashboard).
+                  Nenhum link (ou erro ao carregar — verifique a configuração do servidor).
                 </td>
               </tr>
             ) : null}
@@ -329,11 +328,8 @@ function WagooPage() {
       <div>
         <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Wagoo</h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          Visão de produto: KPIs e receita vêm do agregador Korven (<code className="text-[10px]">/dashboard</code>).
-          Links de cortesia e admin de usuários chamam o wag-backend direto com{" "}
-          <code className="text-[10px]">WAGOO_API_BASE_URL</code> e o mesmo segredo que o backend usa em{" "}
-          <code className="text-[10px]">ADMIN_API_SECRET</code> (ou <code className="text-[10px]">WAGOO_METRICS_API_KEY</code>{" "}
-          no dashboard, se preferir nome explícito).
+          Visão de produto: KPIs e receita vêm do agregador Korven. Links de cortesia e admin de
+          usuários são carregados pelo servidor do dashboard (credenciais não expostas no navegador).
         </p>
       </div>
 

@@ -13,12 +13,13 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { KorvenDashboardProvider, useKorvenDashboard } from "@/lib/dashboard-context";
+import {
+  getDashboardAuthStatus,
+  loginDashboard,
+  logoutDashboard,
+} from "@/lib/dashboard-auth.functions";
 import { parseRootSearch } from "@/lib/root-search";
 import type { RootLoaderData } from "@/lib/root-loader-data";
-
-const LOGIN_USER = "admin";
-const LOGIN_PASS = "2002Dhcp?";
-const AUTH_COOKIE = "korven_dashboard_auth";
 
 function NotFoundComponent() {
   return (
@@ -42,27 +43,28 @@ function NotFoundComponent() {
   );
 }
 
-function hasAuthCookie(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.cookie.split(";").some((part) => part.trim().startsWith(`${AUTH_COOKIE}=1`));
-}
-
 function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (user === LOGIN_USER && pass === LOGIN_PASS) {
-      if (typeof document !== "undefined") {
-        document.cookie = `${AUTH_COOKIE}=1; Path=/; Max-Age=43200; SameSite=Lax`;
+    setSubmitting(true);
+    setError("");
+    try {
+      const result = await loginDashboard({ data: { user, password: pass } });
+      if (!result.ok) {
+        setError(result.error ?? "Credenciais inválidas.");
+        return;
       }
-      setError("");
       onSuccess();
-      return;
+    } catch {
+      setError("Não foi possível autenticar. Tente novamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setError("Credenciais inválidas.");
   }
 
   return (
@@ -102,9 +104,10 @@ function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
           ) : null}
           <button
             type="submit"
-            className="h-10 w-full rounded border border-primary/50 bg-primary/10 font-mono text-xs uppercase tracking-widest text-primary hover:bg-primary/20"
+            disabled={submitting}
+            className="h-10 w-full rounded border border-primary/50 bg-primary/10 font-mono text-xs uppercase tracking-widest text-primary hover:bg-primary/20 disabled:opacity-50"
           >
-            Entrar
+            {submitting ? "Entrando…" : "Entrar"}
           </button>
         </form>
       </div>
@@ -206,9 +209,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [authenticated, setAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    setAuthenticated(hasAuthCookie());
+    let cancelled = false;
+    void getDashboardAuthStatus()
+      .then((status) => {
+        if (!cancelled) setAuthenticated(status.authenticated);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthenticated(false);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loginView = useMemo(
@@ -216,11 +233,16 @@ function RootComponent() {
     [],
   );
   const handleLogout = () => {
-    if (typeof document !== "undefined") {
-      document.cookie = `${AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
-    }
-    setAuthenticated(false);
+    void logoutDashboard().finally(() => setAuthenticated(false));
   };
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="font-mono text-xs text-muted-foreground">Verificando sessão…</p>
+      </div>
+    );
+  }
 
   if (!authenticated) return loginView;
 

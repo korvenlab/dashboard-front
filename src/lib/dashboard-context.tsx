@@ -61,7 +61,7 @@ export function KorvenDashboardProvider({ children }: { children: ReactNode }) {
       setLoadedOnce(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(/401|não autorizado|unauthorized/i.test(msg) ? "Sessão expirada. Faça login novamente." : msg);
       setDashboard(null);
     } finally {
       setLoading(false);

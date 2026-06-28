@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { protectedServerFn } from "@/lib/protected-server-fn";
 import { setResponseHeaders } from "@tanstack/react-start/server";
 import { z } from "zod";
 import {
@@ -17,7 +17,7 @@ const dashboardQuerySchema = z.object({
 export type DashboardQueryInput = z.infer<typeof dashboardQuerySchema>;
 
 /** @deprecated Use `fetchKorvenDashboard` (Stripe integrado). Mantido só por compatibilidade. */
-export const fetchTwoAvendasDashboard = createServerFn({ method: "GET" })
+export const fetchTwoAvendasDashboard = protectedServerFn("GET")
   .inputValidator(dashboardQuerySchema)
   .handler(async ({ data }): Promise<DashboardViewModel> => {
     setResponseHeaders(
@@ -37,7 +37,7 @@ export const fetchTwoAvendasDashboard = createServerFn({ method: "GET" })
     const key = backend.metricsApiKey?.trim();
 
     if (!base) {
-      return buildFallbackDashboardViewModel(filtros, "Defina DASHBOARD_BACKEND_BASE_URL no servidor.");
+      return buildFallbackDashboardViewModel(filtros, "Backend de métricas não configurado.");
     }
 
     const url = new URL(`${base.replace(/\/+$/, "")}/dashboard`);

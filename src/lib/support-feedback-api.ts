@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { getTwoAvendasServerEnv, getWagooServerEnv } from "@/lib/server-env";
 
@@ -103,7 +103,7 @@ async function fetchFeedbackMessagesFromBackend(
  * Agrega mensagens de suporte dos apps Wagoo (wag-backend) e 2AVendas (2A-back).
  * Mesmo contrato `/feedback/messages` + API key de métricas/admin em cada origem.
  */
-export const fetchSupportFeedbackMessages = createServerFn({ method: "GET" })
+export const fetchSupportFeedbackMessages = protectedServerFn("GET")
   .inputValidator(z.object({}))
   .handler(async (): Promise<SupportFeedbackPayload> => {
     const warnings: string[] = [];
@@ -154,7 +154,7 @@ export const fetchSupportFeedbackMessages = createServerFn({ method: "GET" })
     return { items: merged, warnings };
   });
 
-export const deleteSupportFeedbackMessage = createServerFn({ method: "POST" })
+export const deleteSupportFeedbackMessage = protectedServerFn("POST")
   .inputValidator(deleteFeedbackSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deleteFeedbackSchema> };
