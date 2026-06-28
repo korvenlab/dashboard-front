@@ -34,7 +34,7 @@ function Index() {
             Visão Geral
           </h1>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Telemetria consolidada Wagoo + 2AVendas com foco em valor atual e desempenho de cadastros.
+            Telemetria consolidada Wagoo + 2AVENDAS via Stripe (clique em Atualizar).
           </p>
         </div>
       </div>

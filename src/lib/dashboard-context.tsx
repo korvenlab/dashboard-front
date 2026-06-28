@@ -17,7 +17,7 @@ type KorvenDashboardContextValue = {
   loading: boolean;
   error: string | null;
   loadedOnce: boolean;
-  /** Busca Wagoo + 2AVendas via dashboard-back (só chamar no botão Atualizar). */
+  /** Busca métricas Wagoo + 2AVENDAS na Stripe (só no botão Atualizar). */
   refresh: () => Promise<void>;
 };
 
@@ -97,8 +97,8 @@ export function KorvenDashboardEmptyHint({ className }: { className?: string }) 
     >
       <p className="text-foreground">Nenhum dado carregado ainda.</p>
       <p className="mt-2 text-xs leading-relaxed">
-        Use o botão <strong className="text-primary">Atualizar</strong> na barra superior para buscar métricas de
-        Wagoo e 2AVendas. Alterar organização ou período também exige um novo clique em Atualizar.
+        Use o botão <strong className="text-primary">Atualizar</strong> na barra superior para buscar métricas na
+        Stripe (Wagoo + 2AVENDAS). Alterar organização ou período também exige um novo clique em Atualizar.
       </p>
       {loading ? <p className="mt-4 text-xs text-primary">Carregando…</p> : null}
       {error ? <p className="mt-4 text-xs text-rose-400">{error}</p> : null}

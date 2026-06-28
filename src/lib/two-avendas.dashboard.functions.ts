@@ -16,7 +16,7 @@ const dashboardQuerySchema = z.object({
 
 export type DashboardQueryInput = z.infer<typeof dashboardQuerySchema>;
 
-/** Consome o backend agregado (`GET /dashboard`) hospedado separadamente no Render. */
+/** @deprecated Use `fetchKorvenDashboard` (Stripe integrado). Mantido só por compatibilidade. */
 export const fetchTwoAvendasDashboard = createServerFn({ method: "GET" })
   .inputValidator(dashboardQuerySchema)
   .handler(async ({ data }): Promise<DashboardViewModel> => {

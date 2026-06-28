@@ -10,7 +10,6 @@
   //   "WAGOO_API_BASE_URL": "https://api-wagoo...",
   //   "TWO_AVENDAS_API_BASE_URL": "https://api-2avendas..."
   // }
-  // wrangler secret put WAGOO_METRICS_API_KEY   // ou o mesmo valor que ADMIN_API_SECRET no wag-backend
-  // wrangler secret put ADMIN_API_SECRET
-  // wrangler secret put TWO_AVENDAS_METRICS_API_KEY
+  // wrangler secret put STRIPE_SECRET_KEY
+  // Métricas Korven: Stripe (STRIPE_SECRET_KEY). Admin/monitoramento ainda podem usar WAGOO_* / DASHBOARD_BACKEND_*.
 }

@@ -49,7 +49,7 @@ const MOCK: MetricsResponse = {
   ],
 };
 
-/** @deprecated Dados via servidor (`fetchKorvenDashboard`): Wagoo (wag-backend) + 2AVendas (2A-back); não exponha chaves no browser. */
+/** @deprecated Dados mock — use `fetchKorvenDashboard` (Stripe, somente ao pressionar Atualizar). */
 export async function fetchMetrics(_signal?: AbortSignal): Promise<MetricsResponse> {
   return MOCK;
 }

@@ -151,7 +151,7 @@ export function DashboardTopbar() {
           type="button"
           variant="outline"
           className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
-          title="Busca métricas de Wagoo e 2AVendas (dashboard-back)"
+          title="Busca métricas na Stripe (Wagoo + 2AVENDAS)"
           disabled={loading}
           onClick={() => void refresh()}
         >
@@ -159,8 +159,8 @@ export function DashboardTopbar() {
           {loading ? "Carregando…" : "Atualizar"}
         </Button>
         {generatedAt && loadedOnce ? (
-          <span className="hidden lg:inline" title="gerado_em (API)">
-            api {generatedAt}
+          <span className="hidden lg:inline" title="gerado_em (Stripe)">
+            stripe {generatedAt}
           </span>
         ) : (
           <span className="hidden md:inline text-muted-foreground/80">sem dados</span>

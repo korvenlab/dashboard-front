@@ -16,6 +16,12 @@ export type TwoAvendasServerEnv = MetricsApiEnv;
 export type WagooServerEnv = MetricsApiEnv;
 export type DashboardBackendEnv = MetricsApiEnv;
 
+export type StripeServerEnv = {
+  secretKey: string | undefined;
+  wagooPriceIds: string[];
+  avendasPriceIds: string[];
+};
+
 function readEnvPair(
   keys: { url: string; key: string },
   cfEnv?: Record<string, string | undefined>,
@@ -114,4 +120,31 @@ export function getDashboardBackendEnv(): DashboardBackendEnv {
     { url: "DASHBOARD_BACKEND_BASE_URL", key: "DASHBOARD_BACKEND_API_KEY" },
     g.cloudflare?.env,
   );
+}
+
+function parseCsvIds(raw: string | undefined): string[] {
+  const cleaned = stripEnvNoise(raw);
+  if (!cleaned) return [];
+  return cleaned
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Chave Stripe para métricas do dashboard (server-only). */
+export function getStripeServerEnv(): StripeServerEnv {
+  const g = globalThis as typeof globalThis & {
+    cloudflare?: { env?: Record<string, string | undefined> };
+  };
+  const cf = g.cloudflare?.env;
+  const fromProcess =
+    typeof process !== "undefined" && process.env ? process.env : undefined;
+
+  return {
+    secretKey: stripEnvNoise(cf?.STRIPE_SECRET_KEY ?? fromProcess?.STRIPE_SECRET_KEY),
+    wagooPriceIds: parseCsvIds(cf?.STRIPE_WAGOO_PRICE_IDS ?? fromProcess?.STRIPE_WAGOO_PRICE_IDS),
+    avendasPriceIds: parseCsvIds(
+      cf?.STRIPE_2AVENDAS_PRICE_IDS ?? fromProcess?.STRIPE_2AVENDAS_PRICE_IDS,
+    ),
+  };
 }
