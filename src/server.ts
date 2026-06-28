@@ -20,7 +20,14 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 function withSecurityHeaders(response: Response): Response {
-  const headers = new Headers(response.headers);
+  const headers = new Headers();
+  for (const [key, value] of response.headers.entries()) {
+    if (key.toLowerCase() === "set-cookie") {
+      headers.append("set-cookie", value);
+    } else if (!headers.has(key)) {
+      headers.set(key, value);
+    }
+  }
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     if (!headers.has(key)) headers.set(key, value);
   }

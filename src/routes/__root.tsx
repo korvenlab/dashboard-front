@@ -67,7 +67,9 @@ function LoginPanel({
       }
       const status = await fetchDashboardAuthStatus();
       if (!status.authenticated) {
-        setError("Sessão não persistiu. Limpe cookies do site e tente novamente.");
+        setError(
+          "Login aceito, mas a sessão não foi salva. Tente em aba anônima ou limpe os cookies de dashboard.korvenlab.com.",
+        );
         return;
       }
       onSuccess();
@@ -81,9 +83,9 @@ function LoginPanel({
   if (!authConfigured) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md rounded border border-chart-4/50 bg-chart-4/10 p-6 font-mono text-xs text-chart-4">
-          Autenticação não configurada no servidor. Defina as variáveis de ambiente de login no Vercel
-          antes de usar o painel em produção.
+        <div className="w-full max-w-md rounded border border-chart-4/50 bg-chart-4/10 p-6 font-mono text-xs leading-relaxed text-chart-4">
+          Login não configurado no servidor. Defina <strong>KORVEN_DASHBOARD_USER</strong> e{" "}
+          <strong>KORVEN_DASHBOARD_PASSWORD</strong> nas variáveis de ambiente do Vercel.
         </div>
       </div>
     );

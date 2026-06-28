@@ -47,32 +47,41 @@ export function getDashboardAuthEnv(): DashboardAuthEnv {
   };
 }
 
-function sessionSecret(): string | undefined {
-  return getDashboardAuthEnv().sessionSecret;
+/** Só exige usuário e senha — KORVEN_SESSION_SECRET é opcional (derivado automaticamente). */
+export function isDashboardAuthConfigured(): boolean {
+  const { user, password } = getDashboardAuthEnv();
+  return Boolean(user && password);
 }
 
-export function isDashboardAuthConfigured(): boolean {
-  const { user, password, sessionSecret: secret } = getDashboardAuthEnv();
-  return Boolean(user && password && secret);
+function deriveSessionSecret(user: string, password: string): string {
+  return createHmac("sha256", "korven-dashboard-session-v1")
+    .update(`${user}\0${password}`)
+    .digest("base64url");
+}
+
+function effectiveSessionSecret(): string | undefined {
+  const env = getDashboardAuthEnv();
+  if (env.sessionSecret) return env.sessionSecret;
+  if (env.user && env.password) return deriveSessionSecret(env.user, env.password);
+  return undefined;
+}
+
+function digestCompare(a: string, b: string): boolean {
+  const ha = createHmac("sha256", "korven-dashboard-compare").update(a).digest();
+  const hb = createHmac("sha256", "korven-dashboard-compare").update(b).digest();
+  return timingSafeEqual(ha, hb);
 }
 
 export function verifyDashboardCredentials(user: string, password: string): boolean {
   const env = getDashboardAuthEnv();
-  if (!env.user || !env.password || !env.sessionSecret) return false;
-  const userOk = timingSafeEqualStr(user.trim(), env.user);
-  const passOk = timingSafeEqualStr(password, env.password);
+  if (!env.user || !env.password) return false;
+  const userOk = digestCompare(user.trim().toLowerCase(), env.user.trim().toLowerCase());
+  const passOk = digestCompare(password, env.password);
   return userOk && passOk;
 }
 
-function timingSafeEqualStr(a: string, b: string): boolean {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
-
 export function createDashboardSessionToken(): string | null {
-  const secret = sessionSecret();
+  const secret = effectiveSessionSecret();
   if (!secret) return null;
   const exp = String(Date.now() + SESSION_MS);
   const sig = createHmac("sha256", secret).update(exp).digest("base64url");
@@ -80,7 +89,7 @@ export function createDashboardSessionToken(): string | null {
 }
 
 export function isDashboardSessionTokenValid(token: string | undefined): boolean {
-  const secret = sessionSecret();
+  const secret = effectiveSessionSecret();
   if (!secret || !token?.trim()) return false;
   const [expRaw, sig] = token.split(".");
   if (!expRaw || !sig) return false;
@@ -117,7 +126,7 @@ export function dashboardSessionCookieOptions() {
 
 function serializeCookie(name: string, value: string, options: ReturnType<typeof dashboardSessionCookieOptions>): string {
   const parts = [
-    `${name}=${encodeURIComponent(value)}`,
+    `${name}=${value}`,
     `Path=${options.path}`,
     "HttpOnly",
     `SameSite=${options.sameSite === "lax" ? "Lax" : "Strict"}`,
@@ -143,41 +152,12 @@ export function readCookieFromHeader(cookieHeader: string | null, name: string):
     const eq = trimmed.indexOf("=");
     if (eq <= 0) continue;
     const key = trimmed.slice(0, eq);
-    if (key === name) return decodeURIComponent(trimmed.slice(eq + 1));
+    if (key === name) return trimmed.slice(eq + 1);
   }
   return undefined;
 }
 
 export function isDashboardRequestAuthenticated(request: Request): boolean {
   const token = readCookieFromHeader(request.headers.get("cookie"), DASHBOARD_SESSION_COOKIE);
-  return isDashboardSessionTokenValid(token);
-}
-
-export async function readDashboardSessionToken(): Promise<string | undefined> {
-  const { getCookie } = await import("@tanstack/react-start/server");
-  return getCookie(DASHBOARD_SESSION_COOKIE) || undefined;
-}
-
-export async function issueDashboardSessionCookie(token: string): Promise<void> {
-  const { setCookie } = await import("@tanstack/react-start/server");
-  setCookie(DASHBOARD_SESSION_COOKIE, token, dashboardSessionCookieOptions());
-}
-
-export async function clearDashboardSessionCookie(): Promise<void> {
-  const { deleteCookie } = await import("@tanstack/react-start/server");
-  deleteCookie(DASHBOARD_SESSION_COOKIE, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProductionDeploy(),
-    path: "/",
-  });
-}
-
-export async function isDashboardSessionActive(request?: Request): Promise<boolean> {
-  if (!isDashboardAuthConfigured()) return true;
-  if (request) {
-    return isDashboardRequestAuthenticated(request);
-  }
-  const token = await readDashboardSessionToken();
   return isDashboardSessionTokenValid(token);
 }
