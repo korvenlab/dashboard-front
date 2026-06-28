@@ -1,6 +1,7 @@
 import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { dashboardServerFnAuthMiddleware } from "./lib/dashboard-server-fn-auth.middleware";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -18,7 +19,7 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorMiddleware],
+  requestMiddleware: [dashboardServerFnAuthMiddleware, errorMiddleware],
   serverFns: {
     fetch: (url, init) =>
       fetch(url, {

@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { dashboardAuthMiddleware } from "@/lib/dashboard-auth.middleware";
 
-/** Server function que exige sessão do dashboard (não expõe segredos ao browser). */
+/** Server function protegida por dashboardServerFnAuthMiddleware em src/start.ts */
 export function protectedServerFn<M extends "GET" | "POST">(method: M) {
-  return createServerFn({ method }).middleware([dashboardAuthMiddleware]);
+  return createServerFn({ method });
 }

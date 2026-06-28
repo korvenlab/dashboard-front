@@ -46,7 +46,7 @@ export function DashboardTopbar() {
   const search = useSearch({ from: "__root__" }) as RootSearch;
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { dashboard, loading, refresh, loadedOnce } = useKorvenDashboard();
+  const { dashboard, loading, refresh, loadedOnce, error } = useKorvenDashboard();
 
   const organization_id = search.organization_id;
   const period_days = search.period_days ?? 30;
@@ -147,6 +147,11 @@ export function DashboardTopbar() {
       )}
 
       <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+        {error ? (
+          <span className="max-w-xs truncate text-rose-400 normal-case" title={error}>
+            {error}
+          </span>
+        ) : null}
         <Button
           type="button"
           variant="outline"

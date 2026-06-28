@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { fetchKorvenDashboard } from "@/lib/dashboard-api";
+import { fetchDashboardMetrics } from "@/lib/dashboard-metrics-http";
 import type { DashboardViewModel } from "@/lib/dashboard-view";
 import type { RootSearch } from "@/lib/root-search";
 
@@ -49,16 +49,16 @@ export function KorvenDashboardProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const result = (await fetchKorvenDashboard({
-        data: {
+      const result = await fetchDashboardMetrics({
           organization_id: search.organization_id,
           period_days: search.period_days ?? 30,
           chart_days: search.chart_days ?? 14,
-          force_refresh: true,
-        },
-      })) as DashboardViewModel;
+        });
       setDashboard(result);
       setLoadedOnce(true);
+      if (result.meta.source === "fallback" && result.meta.message) {
+        setError(result.meta.message);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(/401|não autorizado|unauthorized/i.test(msg) ? "Sessão expirada. Faça login novamente." : msg);
