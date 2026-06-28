@@ -19,4 +19,11 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [errorMiddleware],
+  serverFns: {
+    fetch: (url, init) =>
+      fetch(url, {
+        ...init,
+        credentials: "include",
+      }),
+  },
 }));

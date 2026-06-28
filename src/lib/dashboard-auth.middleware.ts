@@ -1,13 +1,15 @@
 import { createMiddleware } from "@tanstack/react-start";
 
-/** Bloqueia server functions sem sessão válida (cookie HttpOnly assinado no servidor). */
+/** Bloqueia server functions sem sessão válida quando auth está configurado no servidor. */
 export const dashboardAuthMiddleware = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const [{ isDashboardRequestAuthenticated }, { getRequest }] = await Promise.all([
-    import("@/lib/dashboard-auth.server"),
-    import("@tanstack/react-start/server"),
-  ]);
+  const auth = await import("@/lib/dashboard-auth.server");
+  const { getRequest } = await import("@tanstack/react-start/server");
 
-  if (!isDashboardRequestAuthenticated(getRequest())) {
+  if (!auth.isDashboardAuthConfigured()) {
+    return next();
+  }
+
+  if (!auth.isDashboardRequestAuthenticated(getRequest())) {
     throw new Error("Não autorizado.");
   }
 

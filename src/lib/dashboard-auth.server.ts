@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const DASHBOARD_SESSION_COOKIE = "korven_dashboard_session";
 
 const SESSION_MS = 12 * 60 * 60 * 1000;
+const SESSION_MAX_AGE_SEC = SESSION_MS / 1000;
 
 export type DashboardAuthEnv = {
   user: string | undefined;
@@ -17,11 +18,23 @@ function readCfEnv(): Record<string, string | undefined> | undefined {
   return g.cloudflare?.env;
 }
 
+function stripEnvNoise(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  let s = v.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.replace(/\\n$/g, "").replace(/\n$/g, "").replace(/\r$/g, "").trim() || undefined;
+}
+
 function readEnv(key: string): string | undefined {
-  const cf = readCfEnv()?.[key];
-  if (cf?.trim()) return cf.trim();
-  if (typeof process !== "undefined" && process.env?.[key]?.trim()) {
-    return process.env[key]!.trim();
+  const cf = stripEnvNoise(readCfEnv()?.[key]);
+  if (cf) return cf;
+  if (typeof process !== "undefined" && process.env?.[key]) {
+    return stripEnvNoise(process.env[key]);
   }
   return undefined;
 }
@@ -46,7 +59,7 @@ export function isDashboardAuthConfigured(): boolean {
 export function verifyDashboardCredentials(user: string, password: string): boolean {
   const env = getDashboardAuthEnv();
   if (!env.user || !env.password || !env.sessionSecret) return false;
-  const userOk = timingSafeEqualStr(user, env.user);
+  const userOk = timingSafeEqualStr(user.trim(), env.user);
   const passOk = timingSafeEqualStr(password, env.password);
   return userOk && passOk;
 }
@@ -84,6 +97,45 @@ export function isDashboardSessionTokenValid(token: string | undefined): boolean
   }
 }
 
+function isProductionDeploy(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL === "1" ||
+    process.env.CF_PAGES === "1"
+  );
+}
+
+export function dashboardSessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: isProductionDeploy(),
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SEC,
+  };
+}
+
+function serializeCookie(name: string, value: string, options: ReturnType<typeof dashboardSessionCookieOptions>): string {
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    `Path=${options.path}`,
+    "HttpOnly",
+    `SameSite=${options.sameSite === "lax" ? "Lax" : "Strict"}`,
+    `Max-Age=${options.maxAge}`,
+  ];
+  if (options.secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+export function buildDashboardSessionSetCookie(token: string): string {
+  return serializeCookie(DASHBOARD_SESSION_COOKIE, token, dashboardSessionCookieOptions());
+}
+
+export function buildDashboardSessionClearCookie(): string {
+  const secure = isProductionDeploy() ? "; Secure" : "";
+  return `${DASHBOARD_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
+}
+
 export function readCookieFromHeader(cookieHeader: string | null, name: string): string | undefined {
   if (!cookieHeader) return undefined;
   for (const part of cookieHeader.split(";")) {
@@ -101,20 +153,31 @@ export function isDashboardRequestAuthenticated(request: Request): boolean {
   return isDashboardSessionTokenValid(token);
 }
 
-function isProductionDeploy(): boolean {
-  return (
-    process.env.NODE_ENV === "production" ||
-    process.env.VERCEL === "1" ||
-    process.env.CF_PAGES === "1"
-  );
+export async function readDashboardSessionToken(): Promise<string | undefined> {
+  const { getCookie } = await import("@tanstack/react-start/server");
+  return getCookie(DASHBOARD_SESSION_COOKIE) || undefined;
 }
 
-export function buildDashboardSessionSetCookie(token: string): string {
-  const secure = isProductionDeploy() ? "; Secure" : "";
-  return `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}${secure}`;
+export async function issueDashboardSessionCookie(token: string): Promise<void> {
+  const { setCookie } = await import("@tanstack/react-start/server");
+  setCookie(DASHBOARD_SESSION_COOKIE, token, dashboardSessionCookieOptions());
 }
 
-export function buildDashboardSessionClearCookie(): string {
-  const secure = isProductionDeploy() ? "; Secure" : "";
-  return `${DASHBOARD_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
+export async function clearDashboardSessionCookie(): Promise<void> {
+  const { deleteCookie } = await import("@tanstack/react-start/server");
+  deleteCookie(DASHBOARD_SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProductionDeploy(),
+    path: "/",
+  });
+}
+
+export async function isDashboardSessionActive(request?: Request): Promise<boolean> {
+  if (!isDashboardAuthConfigured()) return true;
+  if (request) {
+    return isDashboardRequestAuthenticated(request);
+  }
+  const token = await readDashboardSessionToken();
+  return isDashboardSessionTokenValid(token);
 }

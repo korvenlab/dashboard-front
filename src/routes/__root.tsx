@@ -14,10 +14,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { KorvenDashboardProvider, useKorvenDashboard } from "@/lib/dashboard-context";
 import {
-  getDashboardAuthStatus,
-  loginDashboard,
-  logoutDashboard,
-} from "@/lib/dashboard-auth.functions";
+  fetchDashboardAuthStatus,
+  postDashboardLogin,
+  postDashboardLogout,
+} from "@/lib/dashboard-auth-http";
 import { parseRootSearch } from "@/lib/root-search";
 import type { RootLoaderData } from "@/lib/root-loader-data";
 
@@ -43,7 +43,13 @@ function NotFoundComponent() {
   );
 }
 
-function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
+function LoginPanel({
+  onSuccess,
+  authConfigured,
+}: {
+  onSuccess: () => void;
+  authConfigured: boolean;
+}) {
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
@@ -54,9 +60,14 @@ function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
     setSubmitting(true);
     setError("");
     try {
-      const result = await loginDashboard({ data: { user, password: pass } });
+      const result = await postDashboardLogin(user, pass);
       if (!result.ok) {
         setError(result.error ?? "Credenciais inválidas.");
+        return;
+      }
+      const status = await fetchDashboardAuthStatus();
+      if (!status.authenticated) {
+        setError("Sessão não persistiu. Limpe cookies do site e tente novamente.");
         return;
       }
       onSuccess();
@@ -65,6 +76,17 @@ function LoginPanel({ onSuccess }: { onSuccess: () => void }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (!authConfigured) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md rounded border border-chart-4/50 bg-chart-4/10 p-6 font-mono text-xs text-chart-4">
+          Autenticação não configurada no servidor. Defina as variáveis de ambiente de login no Vercel
+          antes de usar o painel em produção.
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -210,12 +232,15 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [authConfigured, setAuthConfigured] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    void getDashboardAuthStatus()
+    void fetchDashboardAuthStatus()
       .then((status) => {
-        if (!cancelled) setAuthenticated(status.authenticated);
+        if (cancelled) return;
+        setAuthConfigured(status.configured);
+        setAuthenticated(status.authenticated);
       })
       .catch(() => {
         if (!cancelled) setAuthenticated(false);
@@ -229,11 +254,16 @@ function RootComponent() {
   }, []);
 
   const loginView = useMemo(
-    () => <LoginPanel onSuccess={() => setAuthenticated(true)} />,
-    [],
+    () => (
+      <LoginPanel
+        authConfigured={authConfigured}
+        onSuccess={() => setAuthenticated(true)}
+      />
+    ),
+    [authConfigured],
   );
   const handleLogout = () => {
-    void logoutDashboard().finally(() => setAuthenticated(false));
+    void postDashboardLogout().finally(() => setAuthenticated(false));
   };
 
   if (!authChecked) {
