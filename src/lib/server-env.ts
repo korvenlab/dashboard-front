@@ -63,28 +63,28 @@ function stripEnvNoise(v: string | undefined): string | undefined {
   return s || undefined;
 }
 
+function readProcessEnv(key: string): string | undefined {
+  if (typeof process === "undefined" || !process.env) return undefined;
+  return stripEnvNoise(process.env[key]);
+}
+
+function readCfOrProcess(cf: Record<string, string | undefined> | undefined, key: string): string | undefined {
+  return stripEnvNoise(cf?.[key] ?? readProcessEnv(key));
+}
+
 export function getWagooServerEnv(): WagooServerEnv {
   const g = globalThis as typeof globalThis & {
     cloudflare?: { env?: Record<string, string | undefined> };
   };
   const cf = g.cloudflare?.env;
-  const fromProcess =
-    typeof process !== "undefined" && process.env
-      ? {
-          apiBaseUrl: process.env.WAGOO_API_BASE_URL,
-          metricsApiKey: firstNonEmptyTrimmed(
-            process.env.WAGOO_METRICS_API_KEY,
-            process.env.ADMIN_API_SECRET,
-          ),
-        }
-      : { apiBaseUrl: undefined, metricsApiKey: undefined };
 
   return {
-    apiBaseUrl: stripEnvNoise(cf?.WAGOO_API_BASE_URL ?? fromProcess.apiBaseUrl),
+    apiBaseUrl: readCfOrProcess(cf, "WAGOO_API_BASE_URL"),
     metricsApiKey: firstNonEmptyTrimmed(
-      cf?.WAGOO_METRICS_API_KEY,
-      cf?.ADMIN_API_SECRET,
-      fromProcess.metricsApiKey,
+      readCfOrProcess(cf, "WAGOO_METRICS_API_KEY"),
+      readCfOrProcess(cf, "METRICS_API_KEY"),
+      readCfOrProcess(cf, "ADMIN_API_SECRET"),
+      readCfOrProcess(cf, "DASHBOARD_BACKEND_API_KEY"),
     ),
   };
 }
@@ -93,10 +93,24 @@ export function getTwoAvendasServerEnv(): TwoAvendasServerEnv {
   const g = globalThis as typeof globalThis & {
     cloudflare?: { env?: Record<string, string | undefined> };
   };
-  return readEnvPair(
+  const cf = g.cloudflare?.env;
+  const legacy = readEnvPair(
     { url: "TWO_AVENDAS_API_BASE_URL", key: "TWO_AVENDAS_METRICS_API_KEY" },
-    g.cloudflare?.env,
+    cf,
   );
+  const dashboard = readEnvPair(
+    { url: "DASHBOARD_BACKEND_BASE_URL", key: "DASHBOARD_BACKEND_API_KEY" },
+    cf,
+  );
+
+  return {
+    apiBaseUrl: firstNonEmptyTrimmed(legacy.apiBaseUrl, dashboard.apiBaseUrl),
+    metricsApiKey: firstNonEmptyTrimmed(
+      legacy.metricsApiKey,
+      dashboard.metricsApiKey,
+      readCfOrProcess(cf, "METRICS_API_KEY"),
+    ),
+  };
 }
 
 /** Segredo para `POST /api/billing/organization-access-link` (header `X-Billing-Admin-Secret`). Se vazio, o mint usa `TWO_AVENDAS_METRICS_API_KEY` só em dev — prefira variável dedicada em produção. */
@@ -104,12 +118,11 @@ export function getTwoAvendasBillingAdminSecret(): string | undefined {
   const g = globalThis as typeof globalThis & {
     cloudflare?: { env?: Record<string, string | undefined> };
   };
-  const cf = g.cloudflare?.env?.TWO_AVENDAS_BILLING_ADMIN_SECRET?.trim();
-  const fromProcess =
-    typeof process !== "undefined" && process.env
-      ? process.env.TWO_AVENDAS_BILLING_ADMIN_SECRET?.trim()
-      : undefined;
-  return cf || fromProcess || undefined;
+  const cf = g.cloudflare?.env;
+  return firstNonEmptyTrimmed(
+    readCfOrProcess(cf, "TWO_AVENDAS_BILLING_ADMIN_SECRET"),
+    getTwoAvendasServerEnv().metricsApiKey,
+  );
 }
 
 export function getDashboardBackendEnv(): DashboardBackendEnv {

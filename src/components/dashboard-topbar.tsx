@@ -152,14 +152,16 @@ export function DashboardTopbar() {
             {error}
           </span>
         ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
-          title="Busca métricas na Stripe (Wagoo + 2AVENDAS)"
-          disabled={loading}
-          onClick={() => void refresh()}
-        >
+      <Button
+        type="button"
+        variant="outline"
+        className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
+        title="Busca métricas na Stripe (Wagoo + 2AVENDAS)"
+        disabled={loading}
+        onClick={() => {
+          void refresh();
+        }}
+      >
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           {loading ? "Carregando…" : "Atualizar"}
         </Button>

@@ -49,7 +49,16 @@ export async function handleDashboardMetricsApi(request: Request): Promise<Respo
     chart_days: parsed.data.chart_days ?? 14,
   };
 
-  const { vm, error } = await fetchStripeDashboard(filtros);
+  const stripeTimeoutMs = 50_000;
+  const { vm, error } = await Promise.race([
+    fetchStripeDashboard(filtros),
+    new Promise<{ vm: null; error: string }>((resolve) => {
+      setTimeout(
+        () => resolve({ vm: null, error: "Stripe demorou demais. Tente um período menor." }),
+        stripeTimeoutMs,
+      );
+    }),
+  ]);
   const body: DashboardViewModel =
     vm ?? buildFallbackDashboardViewModel(filtros, error ?? "Não foi possível carregar dados da Stripe.");
 

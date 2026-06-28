@@ -3,8 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   deleteAdminUser,
   fetchAdminUserAssets,
-  fetchAdminRoles,
-  fetchAdminUsers,
   patchAdminUserRole,
   patchAdminUserStatus,
   patchWagooUserComplimentaryAccess,
@@ -17,6 +15,7 @@ import {
   type AdminUser,
   type AdminUserAsset,
 } from "@/lib/admin-api";
+import { fetchAdminRolesHttp, fetchAdminUsersHttp } from "@/lib/admin-http";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -228,9 +227,12 @@ function AdminPage() {
     setLoading(true);
     setMessage("");
     try {
-      const data = (await fetchAdminUsers({
-        data: { source: targetSource, search: search.trim() || undefined, page, limit: 20 },
-      })) as { items: AdminUser[]; page: number; limit: number; total: number };
+      const data = await fetchAdminUsersHttp({
+        source: targetSource,
+        search: search.trim() || undefined,
+        page,
+        limit: 20,
+      });
       setPageData(data);
       setPageSource(targetSource);
       setTierDraftByUser({});
@@ -384,7 +386,7 @@ function AdminPage() {
     if (source === "2avendas") {
       void (async () => {
         try {
-          const result = (await fetchAdminRoles({ data: { source } })) as AdminRolesResult;
+          const result = await fetchAdminRolesHttp(source);
           if (cancelled) return;
           setRoles(result.items);
           setRolesFromFallback(result.fromFallback);

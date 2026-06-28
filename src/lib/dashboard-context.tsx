@@ -21,6 +21,10 @@ type KorvenDashboardContextValue = {
   refresh: () => Promise<void>;
 };
 
+function sessionExpiredMessage(msg: string): boolean {
+  return /sessão expirada|não autorizado|unauthorized/i.test(msg);
+}
+
 const KorvenDashboardContext = createContext<KorvenDashboardContextValue | null>(null);
 
 function filtersKey(search: RootSearch): string {
@@ -31,7 +35,13 @@ function filtersKey(search: RootSearch): string {
   ].join("|");
 }
 
-export function KorvenDashboardProvider({ children }: { children: ReactNode }) {
+export function KorvenDashboardProvider({
+  children,
+  onSessionExpired,
+}: {
+  children: ReactNode;
+  onSessionExpired?: () => void;
+}) {
   const search = useSearch({ from: "__root__" }) as RootSearch;
   const [dashboard, setDashboard] = useState<DashboardViewModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,13 +70,18 @@ export function KorvenDashboardProvider({ children }: { children: ReactNode }) {
         setError(result.meta.message);
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(/401|não autorizado|unauthorized/i.test(msg) ? "Sessão expirada. Faça login novamente." : msg);
+      const raw = e instanceof Error ? e.message : String(e);
+      const msg = sessionExpiredMessage(raw) ? "Sessão expirada. Faça login novamente." : raw;
+      setError(msg);
       setDashboard(null);
+      setLoadedOnce(true);
+      if (sessionExpiredMessage(msg)) {
+        onSessionExpired?.();
+      }
     } finally {
       setLoading(false);
     }
-  }, [search.organization_id, search.period_days, search.chart_days]);
+  }, [search.organization_id, search.period_days, search.chart_days, onSessionExpired]);
 
   const value = useMemo(
     () => ({ dashboard, loading, error, loadedOnce, refresh }),

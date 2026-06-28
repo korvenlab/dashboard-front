@@ -280,7 +280,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <KorvenDashboardProvider>
+      <KorvenDashboardProvider onSessionExpired={() => setAuthenticated(false)}>
         <AuthenticatedShell onLogout={handleLogout} />
       </KorvenDashboardProvider>
     </QueryClientProvider>
@@ -288,7 +288,7 @@ function RootComponent() {
 }
 
 function AuthenticatedShell({ onLogout }: { onLogout: () => void }) {
-  const { dashboard } = useKorvenDashboard();
+  const { dashboard, error, loading } = useKorvenDashboard();
   const banner = dashboard?.meta.message?.trim() ? dashboard.meta.message : null;
 
   return (
@@ -297,7 +297,12 @@ function AuthenticatedShell({ onLogout }: { onLogout: () => void }) {
         <AppSidebar dynamicItems={dashboard?.ui.sidebar_itens} onLogout={onLogout} />
         <div className="flex min-h-screen flex-1 flex-col">
           <DashboardTopbar />
-          {banner ? (
+          {error ? (
+            <div className="border-b border-rose-500/40 bg-rose-500/10 px-4 py-2 font-mono text-[11px] text-rose-400">
+              {error}
+              {loading ? " · sincronizando…" : null}
+            </div>
+          ) : banner ? (
             <div className="border-b border-chart-4/50 bg-chart-4/10 px-4 py-2 font-mono text-[11px] text-chart-4">
               {banner}
             </div>

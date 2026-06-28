@@ -420,8 +420,8 @@ async function callAdminApi(
   if (!base || !key) {
     const hint =
       source === "wagoo"
-        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY ou ADMIN_API_SECRET (mesmo valor do wag-backend)."
-        : "Defina TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY.";
+        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou METRICS_API_KEY / ADMIN_API_SECRET) no Vercel."
+        : "Defina DASHBOARD_BACKEND_BASE_URL e DASHBOARD_BACKEND_API_KEY (ou TWO_AVENDAS_* / METRICS_API_KEY) no Vercel.";
     throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
   const url = new URL(`${resolveAdminApiBaseUrl(base, source)}${path}`);
@@ -455,83 +455,104 @@ async function callAdminApi(
   return json;
 }
 
+function extractAdminUsersItems(raw: unknown): unknown[] {
+  const root = asRecord(raw);
+  if (!root) return [];
+  const data = asRecord(root.data);
+  const candidates = [
+    data?.items,
+    data?.users,
+    root.items,
+    root.users,
+    Array.isArray(root.data) ? root.data : null,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+  return [];
+}
+
+export async function listAdminUsers(input: z.infer<typeof listSchema>): Promise<AdminUsersPage> {
+  const q = new URLSearchParams();
+  if (input.search?.trim()) q.set("search", input.search.trim());
+  q.set("page", String(input.page));
+  q.set("limit", String(input.limit));
+  const raw = await callAdminApi(input.source, "GET", `/api/admin/users?${q.toString()}`);
+  const itemsRaw = extractAdminUsersItems(raw);
+  const root = asRecord(raw);
+  const payload = asRecord(root?.data) ?? root ?? {};
+  const items = itemsRaw.map(normalizeUser).filter((x): x is AdminUser => !!x);
+  return {
+    items,
+    page: asNumber(payload.page, input.page),
+    limit: asNumber(payload.limit, input.limit),
+    total: asNumber(payload.total, items.length),
+  };
+}
+
 export const fetchAdminUsers = protectedServerFn("GET")
   .inputValidator(listSchema)
   .handler((async (ctx: unknown): Promise<AdminUsersPage> => {
     const { data } = ctx as { data: z.infer<typeof listSchema> };
-    const q = new URLSearchParams();
-    if (data.search?.trim()) q.set("search", data.search.trim());
-    q.set("page", String(data.page));
-    q.set("limit", String(data.limit));
-    const raw = await callAdminApi(data.source, "GET", `/api/admin/users?${q.toString()}`);
-    const root = asRecord(raw);
-    const payload = asRecord(root?.data) ?? {};
-    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-    const items = itemsRaw.map(normalizeUser).filter((x): x is AdminUser => !!x);
-    return {
-      items,
-      page: asNumber(payload.page, data.page),
-      limit: asNumber(payload.limit, data.limit),
-      total: asNumber(payload.total, items.length),
-    };
+    return listAdminUsers(data);
   }) as any);
+
+export async function listAdminRoles(source: AdminSource): Promise<AdminRolesResult> {
+  if (source === "wagoo") {
+    return { items: [], fromFallback: false };
+  }
+  let fallbackReason = "rota /api/admin/roles indisponível";
+  try {
+    const raw = await callAdminApi(source, "GET", "/api/admin/roles");
+    const root = asRecord(raw);
+    const dataRoot = asRecord(root?.data);
+    const itemsRaw =
+      (Array.isArray(dataRoot?.items) && dataRoot?.items) ||
+      (Array.isArray(dataRoot?.roles) && dataRoot?.roles) ||
+      (Array.isArray(root?.items) && (root?.items as unknown[])) ||
+      (Array.isArray(root?.roles) && (root?.roles as unknown[])) ||
+      (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
+    const items: AdminRoleOption[] = itemsRaw.reduce<AdminRoleOption[]>((acc, it) => {
+      if (typeof it === "string") {
+        acc.push({ value: it, label: it });
+        return acc;
+      }
+      const r = asRecord(it);
+      if (!r) return acc;
+      const value = asString(r.slug) ?? asString(r.value) ?? asString(r.role);
+      if (!value) return acc;
+      const permsRaw = Array.isArray(r.permissions) ? r.permissions : [];
+      const permissions = permsRaw
+        .map((p) => (typeof p === "string" ? p : null))
+        .filter((p): p is string => !!p);
+      acc.push({
+        value,
+        label: asString(r.label) ?? value,
+        description: asString(r.description),
+        permissions,
+      });
+      return acc;
+    }, []);
+    if (items.length > 0) return { items, fromFallback: false };
+    fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
+  } catch (e) {
+    fallbackReason = stringifyCaughtUnknown(e);
+  }
+
+  const usersPage = await listAdminUsers({ source, page: 1, limit: 100 });
+  const unique = [...new Set(usersPage.items.map((u) => u.role).filter(Boolean))];
+  return {
+    items: unique.map((r) => ({ value: r, label: r })),
+    fromFallback: true,
+    fallbackReason,
+  };
+}
 
 export const fetchAdminRoles = protectedServerFn("GET")
   .inputValidator(z.object({ source: sourceSchema }))
   .handler((async (ctx: unknown): Promise<AdminRolesResult> => {
     const { data } = ctx as { data: { source: AdminSource } };
-    // Wagoo: console Korven não lista/edita roles; wag-backend não expunha /roles → evita fallback e 404.
-    if (data.source === "wagoo") {
-      return { items: [], fromFallback: false };
-    }
-    let fallbackReason = "rota /api/admin/roles indisponível";
-    try {
-      const raw = await callAdminApi(data.source, "GET", "/api/admin/roles");
-      const root = asRecord(raw);
-      const dataRoot = asRecord(root?.data);
-      const itemsRaw =
-        (Array.isArray(dataRoot?.items) && dataRoot?.items) ||
-        (Array.isArray(dataRoot?.roles) && dataRoot?.roles) ||
-        (Array.isArray(root?.items) && (root?.items as unknown[])) ||
-        (Array.isArray(root?.roles) && (root?.roles as unknown[])) ||
-        (Array.isArray(root?.data) ? (root?.data as unknown[]) : []);
-      const items: AdminRoleOption[] = itemsRaw.reduce<AdminRoleOption[]>((acc, it) => {
-        if (typeof it === "string") {
-          acc.push({ value: it, label: it });
-          return acc;
-        }
-        const r = asRecord(it);
-        if (!r) return acc;
-        const value = asString(r.slug) ?? asString(r.value) ?? asString(r.role);
-        if (!value) return acc;
-        const permsRaw = Array.isArray(r.permissions) ? r.permissions : [];
-        const permissions = permsRaw
-          .map((p) => (typeof p === "string" ? p : null))
-          .filter((p): p is string => !!p);
-        acc.push({
-          value,
-          label: asString(r.label) ?? value,
-          description: asString(r.description),
-          permissions,
-        });
-        return acc;
-      }, []);
-      if (items.length > 0) return { items, fromFallback: false };
-      fallbackReason = "resposta de /api/admin/roles sem itens reconhecidos (items/roles)";
-    } catch (e) {
-      fallbackReason = stringifyCaughtUnknown(e);
-    }
-
-    // fallback: infere roles existentes na listagem de usuários
-    const usersPage = (await fetchAdminUsers({
-      data: { source: data.source, page: 1, limit: 100 },
-    })) as AdminUsersPage;
-    const unique = [...new Set(usersPage.items.map((u) => u.role).filter(Boolean))];
-    return {
-      items: unique.map((r) => ({ value: r, label: r })),
-      fromFallback: true,
-      fallbackReason,
-    };
+    return listAdminRoles(data.source);
   }) as any);
 
 export const fetchAdminUser = protectedServerFn("GET")
