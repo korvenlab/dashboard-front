@@ -1,5 +1,9 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getTwoAvendasServerEnv, getWagooServerEnv } from "@/lib/server-env";
+import {
+  envGet,
+  getTwoAvendasServerEnv,
+  getWagooServerEnv,
+} from "@/lib/server-env";
 
 export type ReconcileProduct = "wagoo" | "2avendas";
 
@@ -20,62 +24,100 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function resolveBase(source: ReconcileProduct): {
-  baseUrl: string;
-  apiKey: string;
-} {
+function uniqueNonEmpty(values: (string | undefined)[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const clean = value?.trim();
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
+}
+
+function resolveBaseUrl(source: ReconcileProduct): string {
   if (source === "wagoo") {
-    const env = getWagooServerEnv();
-    let base = env.apiBaseUrl?.replace(/\/+$/, "") ?? "";
-    // Prefer the metrics/admin key; WAGOO_API_SECRET is the control-plane command key.
-    const key =
-      env.metricsApiKey?.trim() ||
-      (typeof process !== "undefined"
-        ? (process.env.WAGOO_API_SECRET || "").trim()
-        : "");
+    let base = getWagooServerEnv().apiBaseUrl?.replace(/\/+$/, "") ?? "";
     if (base.toLowerCase().endsWith("/api/admin")) {
       base = base.slice(0, -"/api/admin".length).replace(/\/+$/, "");
     }
-    if (!base || !key) {
-      throw new Error(
-        "Wagoo: defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou WAGOO_API_SECRET) na Vercel.",
-      );
+    if (!base) {
+      throw new Error("Wagoo: defina WAGOO_API_BASE_URL na Vercel.");
     }
-    return { baseUrl: base, apiKey: key };
+    return base;
   }
-  const env = getTwoAvendasServerEnv();
-  const base = env.apiBaseUrl?.replace(/\/+$/, "") ?? "";
-  const key =
-    env.metricsApiKey?.trim() ||
-    (typeof process !== "undefined"
-      ? (process.env.TWO_AVENDAS_API_SECRET || "").trim()
-      : "");
-  if (!base || !key) {
+  const base =
+    getTwoAvendasServerEnv().apiBaseUrl?.replace(/\/+$/, "") ?? "";
+  if (!base) {
     throw new Error(
-      "2AVendas: defina TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY na Vercel.",
+      "2AVendas: defina TWO_AVENDAS_API_BASE_URL (ou DASHBOARD_BACKEND_BASE_URL) na Vercel.",
     );
   }
-  return { baseUrl: base, apiKey: key };
+  return base;
+}
+
+function candidateApiKeys(source: ReconcileProduct): string[] {
+  if (source === "wagoo") {
+    return uniqueNonEmpty([
+      envGet("WAGOO_METRICS_API_KEY"),
+      envGet("METRICS_API_KEY"),
+      envGet("ADMIN_API_SECRET"),
+      envGet("WAGOO_API_SECRET"),
+      envGet("DASHBOARD_BACKEND_API_KEY"),
+      getWagooServerEnv().metricsApiKey,
+    ]);
+  }
+  return uniqueNonEmpty([
+    envGet("TWO_AVENDAS_METRICS_API_KEY"),
+    envGet("DASHBOARD_BACKEND_API_KEY"),
+    envGet("METRICS_API_KEY"),
+    envGet("TWO_AVENDAS_API_SECRET"),
+    envGet("TWO_AVENDAS_BILLING_ADMIN_SECRET"),
+    getTwoAvendasServerEnv().metricsApiKey,
+  ]);
+}
+
+async function fetchWithKeys(
+  source: ReconcileProduct,
+  page: number,
+  keys: string[],
+): Promise<Response> {
+  const baseUrl = resolveBaseUrl(source);
+  const url =
+    source === "wagoo"
+      ? `${baseUrl}/api/admin/sync/users?page=${page}&per_page=100`
+      : `${baseUrl}/api/admin/users/sync?page=${page}&limit=100`;
+  if (!keys.length) {
+    throw new Error(
+      `${source}: nenhuma chave de API encontrada (WAGOO_METRICS_API_KEY / TWO_AVENDAS_METRICS_API_KEY).`,
+    );
+  }
+
+  let lastUnauthorized: Response | null = null;
+  for (const apiKey of keys) {
+    const res = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "X-API-Key": apiKey,
+        "x-admin-secret": apiKey,
+      },
+      cache: "no-store",
+    });
+    if (res.status !== 401 && res.status !== 403) return res;
+    lastUnauthorized = res;
+  }
+  return lastUnauthorized!;
 }
 
 async function fetchSyncPage(
   source: ReconcileProduct,
   page: number,
 ): Promise<{ items: Record<string, unknown>[]; hasMore: boolean }> {
-  const { baseUrl, apiKey } = resolveBase(source);
-  const url =
-    source === "wagoo"
-      ? `${baseUrl}/api/admin/sync/users?page=${page}&per_page=100`
-      : `${baseUrl}/api/admin/users/sync?page=${page}&limit=100`;
-  const res = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${apiKey}`,
-      "X-API-Key": apiKey,
-      "x-admin-secret": apiKey,
-    },
-    cache: "no-store",
-  });
+  const baseUrl = resolveBaseUrl(source);
+  const keys = candidateApiKeys(source);
+  const res = await fetchWithKeys(source, page, keys);
   const text = await res.text();
   let json: unknown = {};
   try {
@@ -84,8 +126,12 @@ async function fetchSyncPage(
     throw new Error(`${source}: resposta não-JSON (${res.status})`);
   }
   if (!res.ok) {
+    const hint =
+      res.status === 401 || res.status === 403
+        ? " · a chave na Vercel não bate com ADMIN_API_SECRET/METRICS_API_KEY do backend"
+        : "";
     throw new Error(
-      `${source}: sync HTTP ${res.status} em ${baseUrl} · ${text.slice(0, 180)}`,
+      `${source}: sync HTTP ${res.status} em ${baseUrl}${hint} · ${text.slice(0, 180)}`,
     );
   }
   const root = asRecord(json) ?? {};
