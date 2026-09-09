@@ -126,9 +126,14 @@ export async function handleDashboardMetricsApi(
       );
     if (vm) {
       body.meta.source = "stripe-legacy";
-      body.meta.message = `Fonte: Stripe legado (fallback) · Supabase central indisponível: ${centralMessage}`;
+      body.meta.message = `Stripe legado (fallback). Central falhou: ${centralMessage}`;
     } else {
-      body.meta.message = `Supabase central: ${centralMessage} · Stripe legado: ${body.meta.message ?? "indisponível"}`;
+      body.meta.message = `Central: ${centralMessage} · Stripe: ${body.meta.message ?? "indisponível"}`;
+    }
+
+    // Expoe o erro da central também no campo que a UI trata como banner crítico.
+    if (/não configurado|Invalid API key|outro projeto/i.test(centralMessage)) {
+      body.meta.source = "fallback";
     }
 
     return new Response(JSON.stringify(body), {

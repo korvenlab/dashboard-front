@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ExternalLink, RefreshCw, Search, X } from "lucide-react";
 import {
-  createCentralAccessLink,
-  executeCentralAdminCommand,
-  fetchUnifiedUserDetails,
-  fetchUnifiedUsers,
-} from "@/lib/central-api";
+  createCentralAccessLinkHttp,
+  executeCentralAdminCommandHttp,
+  fetchCentralHealth,
+  fetchUnifiedUserDetailsHttp,
+  fetchUnifiedUsersHttp,
+} from "@/lib/central-http";
 import type {
   UnifiedUser,
   UnifiedUserDetails,
@@ -55,6 +56,7 @@ function AdminPage() {
   const [actionByUser, setActionByUser] = useState<Record<string, ActionState>>(
     {},
   );
+  const [healthLabel, setHealthLabel] = useState("checando…");
 
   const load = useCallback(
     async (targetPage = 1) => {
@@ -62,15 +64,13 @@ function AdminPage() {
       setError(null);
       try {
         setPage(
-          (await fetchUnifiedUsers({
-            data: {
-              search: search.trim() || undefined,
-              product: product || undefined,
-              status: status || undefined,
-              page: targetPage,
-              limit: 25,
-            },
-          })) as UnifiedUsersPage,
+          await fetchUnifiedUsersHttp({
+            search: search.trim() || undefined,
+            product: product || undefined,
+            status: status || undefined,
+            page: targetPage,
+            limit: 25,
+          }),
         );
       } catch (cause) {
         setPage(EMPTY_PAGE);
@@ -86,15 +86,31 @@ function AdminPage() {
     void load(1);
   }, [load]);
 
+  useEffect(() => {
+    void fetchCentralHealth()
+      .then((health) => {
+        if (!health.ok) {
+          setHealthLabel(
+            `env incompleta · url=${health.env.urlPresent} · key=${health.env.serviceRolePresent} · match=${health.env.urlMatchesKey}`,
+          );
+          return;
+        }
+        setHealthLabel(
+          `GET /api/dashboard/central/users · ${health.env.urlRef}`,
+        );
+      })
+      .catch((cause) => {
+        setHealthLabel(
+          cause instanceof Error ? cause.message : "health indisponível",
+        );
+      });
+  }, []);
+
   async function openDetails(user: UnifiedUser) {
     setDetailsLoading(true);
     setError(null);
     try {
-      setSelected(
-        (await fetchUnifiedUserDetails({
-          data: { userId: user.id },
-        })) as UnifiedUserDetails,
-      );
+      setSelected(await fetchUnifiedUserDetailsHttp(user.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -120,9 +136,12 @@ function AdminPage() {
       [user.id]: { state: "pending", message: value },
     }));
     try {
-      const result = (await executeCentralAdminCommand({
-        data: { userId: user.id, productSlug, action: value, params },
-      })) as { ok: boolean; commandId?: string; message?: string };
+      const result = await executeCentralAdminCommandHttp({
+        userId: user.id,
+        productSlug,
+        action: value,
+        params,
+      });
       setActionByUser((current) => ({
         ...current,
         [user.id]: {
@@ -149,9 +168,10 @@ function AdminPage() {
       [user.id]: { state: "pending", message: "access-link" },
     }));
     try {
-      const result = (await createCentralAccessLink({
-        data: { userId: user.id, productSlug },
-      })) as { url: string; expiresAt: string | null };
+      const result = await createCentralAccessLinkHttp({
+        userId: user.id,
+        productSlug,
+      });
       await navigator.clipboard.writeText(result.url);
       setActionByUser((current) => ({
         ...current,
@@ -182,14 +202,20 @@ function AdminPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary">
-            Supabase central
+            Control plane · HTTP
           </p>
           <h1 className="mt-1 font-mono text-xl font-semibold uppercase tracking-[0.2em]">
             Usuários unificados
           </h1>
           <p className="mt-2 max-w-3xl text-xs text-muted-foreground">
-            Identidade canônica, contas por produto, acesso e cobrança. Ações
-            são processadas pelas Edge Functions centrais.
+            Lista e detalhes vêm de{" "}
+            <code className="text-foreground">/api/dashboard/central/*</code>,
+            que lê o Postgres central com service role. Comandos e links passam
+            pelas Edge Functions <code>admin-command</code> e{" "}
+            <code>access-link</code>.
+          </p>
+          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+            Fonte ativa: {healthLabel}
           </p>
         </div>
         <Button
@@ -206,7 +232,7 @@ function AdminPage() {
       </header>
 
       <form
-        className="grid gap-3 rounded-none border border-border bg-card/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_180px_auto]"
+        className="grid gap-3 border border-border bg-card/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_180px_auto]"
         onSubmit={(event) => {
           event.preventDefault();
           void load(1);
@@ -663,7 +689,12 @@ function Timeline({
   items,
 }: {
   title: string;
-  items: { id: string; title: string; detail: string | null; at: string }[];
+  items: {
+    id: string;
+    title: string;
+    detail: string | null;
+    at: string | null;
+  }[];
 }) {
   return (
     <section>

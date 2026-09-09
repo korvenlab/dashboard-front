@@ -1,9 +1,9 @@
 /**
  * Ambiente exclusivo do servidor (SSR / Node / Workers). Nunca exponha isto ao browser.
- * `WAGOO_*` → API Wagoo (wag-backend). `TWO_AVENDAS_*` → API 2AVendas (2A-back). Prefixos só histórico.
+ * `WAGOO_*` → API Wagoo (wag-backend). `TWO_AVENDAS_*` → API 2AVendas (2A-back).
  *
  * Wagoo — chave de admin/métricas HTTP: use `WAGOO_METRICS_API_KEY` **ou** o mesmo valor de
- * `ADMIN_API_SECRET` do wag-backend (Bearer / X-API-Key), para um único segredo no Korven Dashboard.
+ * `ADMIN_API_SECRET` do wag-backend (Bearer / X-API-Key).
  */
 export type MetricsApiEnv = {
   apiBaseUrl: string | undefined;
@@ -29,24 +29,37 @@ export type SupabaseServerEnv = {
   serviceRoleKey: string | undefined;
 };
 
-function readEnvPair(
-  keys: { url: string; key: string },
-  cfEnv?: Record<string, string | undefined>,
-): MetricsApiEnv {
-  const fromProcess =
-    typeof process !== "undefined" && process.env
-      ? {
-          apiBaseUrl: process.env[keys.url],
-          metricsApiKey: process.env[keys.key],
-        }
-      : { apiBaseUrl: undefined, metricsApiKey: undefined };
+/** Remove aspas envolventes e `\n` final (copy-paste de `.env` no Render / painéis). */
+export function stripEnvNoise(v: string | undefined): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  let s = String(v).trim();
+  if (!s) return undefined;
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  // Tolera o conteúdo completo de uma linha `.env` colado por engano no
+  // campo Value da Vercel, por exemplo `SUPABASE_URL=https://...`.
+  const assignment = s.match(/^[A-Z][A-Z0-9_]*=([\s\S]*)$/);
+  if (assignment) s = assignment[1].trim();
+  s = s.replace(/\\n$/g, "").replace(/\n$/g, "").replace(/\r$/g, "").trim();
+  return s || undefined;
+}
 
-  return {
-    apiBaseUrl: stripEnvNoise(cfEnv?.[keys.url] ?? fromProcess.apiBaseUrl),
-    metricsApiKey: stripEnvNoise(
-      cfEnv?.[keys.key] ?? fromProcess.metricsApiKey,
-    ),
+/**
+ * Leitura dinâmica de env. Nunca use `process.env.NOME` literal — o bundler Vite/Nitro
+ * pode substituir por string vazia no build e quebrar o runtime da Vercel.
+ */
+export function envGet(name: string): string | undefined {
+  const g = globalThis as typeof globalThis & {
+    cloudflare?: { env?: Record<string, string | undefined> };
   };
+  const fromCf = stripEnvNoise(g.cloudflare?.env?.[name]);
+  if (fromCf) return fromCf;
+  if (typeof process === "undefined" || !process.env) return undefined;
+  return stripEnvNoise(process.env[name]);
 }
 
 function firstNonEmptyTrimmed(
@@ -59,130 +72,121 @@ function firstNonEmptyTrimmed(
   return undefined;
 }
 
-/** Remove aspas envolventes e `\n` final (copy-paste de `.env` no Render / painéis). */
-function stripEnvNoise(v: string | undefined): string | undefined {
-  if (v === undefined || v === null) return undefined;
-  let s = String(v).trim();
-  if (!s) return undefined;
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    s = s.slice(1, -1).trim();
-  }
-  // Tolera o conteúdo completo de uma linha `.env` colado por engano no
-  // campo Value da Vercel, por exemplo `SUPABASE_URL=https://...`.
-  const assignment = s.match(/^[A-Z][A-Z0-9_]*=(.*)$/s);
-  if (assignment) s = assignment[1].trim();
-  s = s.replace(/\\n$/g, "").replace(/\n$/g, "").replace(/\r$/g, "").trim();
-  return s || undefined;
-}
-
-function readProcessEnv(key: string): string | undefined {
-  if (typeof process === "undefined" || !process.env) return undefined;
-  return stripEnvNoise(process.env[key]);
-}
-
-function readCfOrProcess(
-  cf: Record<string, string | undefined> | undefined,
-  key: string,
-): string | undefined {
-  return stripEnvNoise(cf?.[key] ?? readProcessEnv(key));
+function readEnvPair(keys: { url: string; key: string }): MetricsApiEnv {
+  return {
+    apiBaseUrl: envGet(keys.url),
+    metricsApiKey: envGet(keys.key),
+  };
 }
 
 export function getWagooServerEnv(): WagooServerEnv {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  const cf = g.cloudflare?.env;
-
   return {
-    apiBaseUrl: readCfOrProcess(cf, "WAGOO_API_BASE_URL"),
+    apiBaseUrl: envGet("WAGOO_API_BASE_URL"),
     metricsApiKey: firstNonEmptyTrimmed(
-      readCfOrProcess(cf, "WAGOO_METRICS_API_KEY"),
-      readCfOrProcess(cf, "METRICS_API_KEY"),
-      readCfOrProcess(cf, "ADMIN_API_SECRET"),
-      readCfOrProcess(cf, "DASHBOARD_BACKEND_API_KEY"),
+      envGet("WAGOO_METRICS_API_KEY"),
+      envGet("METRICS_API_KEY"),
+      envGet("ADMIN_API_SECRET"),
+      envGet("DASHBOARD_BACKEND_API_KEY"),
     ),
   };
 }
 
 export function getTwoAvendasServerEnv(): TwoAvendasServerEnv {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  const cf = g.cloudflare?.env;
-  const legacy = readEnvPair(
-    { url: "TWO_AVENDAS_API_BASE_URL", key: "TWO_AVENDAS_METRICS_API_KEY" },
-    cf,
-  );
-  const dashboard = readEnvPair(
-    { url: "DASHBOARD_BACKEND_BASE_URL", key: "DASHBOARD_BACKEND_API_KEY" },
-    cf,
-  );
+  const legacy = readEnvPair({
+    url: "TWO_AVENDAS_API_BASE_URL",
+    key: "TWO_AVENDAS_METRICS_API_KEY",
+  });
+  const dashboard = readEnvPair({
+    url: "DASHBOARD_BACKEND_BASE_URL",
+    key: "DASHBOARD_BACKEND_API_KEY",
+  });
 
   return {
     apiBaseUrl: firstNonEmptyTrimmed(legacy.apiBaseUrl, dashboard.apiBaseUrl),
     metricsApiKey: firstNonEmptyTrimmed(
       legacy.metricsApiKey,
       dashboard.metricsApiKey,
-      readCfOrProcess(cf, "METRICS_API_KEY"),
+      envGet("METRICS_API_KEY"),
     ),
   };
 }
 
-/** Segredo para `POST /api/billing/organization-access-link` (header `X-Billing-Admin-Secret`). Se vazio, o mint usa `TWO_AVENDAS_METRICS_API_KEY` só em dev — prefira variável dedicada em produção. */
+/** Segredo para `POST /api/billing/organization-access-link` (header `X-Billing-Admin-Secret`). */
 export function getTwoAvendasBillingAdminSecret(): string | undefined {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  const cf = g.cloudflare?.env;
   return firstNonEmptyTrimmed(
-    readCfOrProcess(cf, "TWO_AVENDAS_BILLING_ADMIN_SECRET"),
+    envGet("TWO_AVENDAS_BILLING_ADMIN_SECRET"),
     getTwoAvendasServerEnv().metricsApiKey,
   );
 }
 
 export function getDashboardBackendEnv(): DashboardBackendEnv {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  return readEnvPair(
-    { url: "DASHBOARD_BACKEND_BASE_URL", key: "DASHBOARD_BACKEND_API_KEY" },
-    g.cloudflare?.env,
-  );
+  return readEnvPair({
+    url: "DASHBOARD_BACKEND_BASE_URL",
+    key: "DASHBOARD_BACKEND_API_KEY",
+  });
 }
 
-/** Configuração canônica do banco central. Sem aliases para evitar apontar ao projeto errado. */
+function decodeJwtPayload(
+  token: string,
+): { ref?: string; role?: string } | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const json = Buffer.from(part, "base64url").toString("utf8");
+    return JSON.parse(json) as { ref?: string; role?: string };
+  } catch {
+    return null;
+  }
+}
+
+/** Configuração canônica do banco central. */
 export function getSupabaseServerEnv(): SupabaseServerEnv {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  const cf = g.cloudflare?.env;
-  const processEnv =
-    typeof process !== "undefined" && process.env ? process.env : undefined;
   const url = firstNonEmptyTrimmed(
-    cf?.SUPABASE_URL,
-    processEnv?.SUPABASE_URL,
-    cf?.VITE_SUPABASE_URL,
-    processEnv?.VITE_SUPABASE_URL,
-  );
+    envGet("SUPABASE_URL"),
+    envGet("VITE_SUPABASE_URL"),
+  )?.replace(/\/+$/, "");
+
   const anonKey = firstNonEmptyTrimmed(
-    cf?.SUPABASE_ANON_KEY,
-    processEnv?.SUPABASE_ANON_KEY,
-    cf?.SUPABASE_PUBLISHABLE_KEY,
-    processEnv?.SUPABASE_PUBLISHABLE_KEY,
-    cf?.VITE_SUPABASE_PUBLISHABLE_KEY,
-    processEnv?.VITE_SUPABASE_PUBLISHABLE_KEY,
-  );
-  const serviceRoleKey = firstNonEmptyTrimmed(
-    cf?.SUPABASE_SERVICE_ROLE_KEY,
-    processEnv?.SUPABASE_SERVICE_ROLE_KEY,
+    envGet("SUPABASE_ANON_KEY"),
+    envGet("SUPABASE_PUBLISHABLE_KEY"),
+    envGet("VITE_SUPABASE_PUBLISHABLE_KEY"),
   )?.replace(/\s+/g, "");
+
+  const serviceRoleKey = firstNonEmptyTrimmed(
+    envGet("SUPABASE_SERVICE_ROLE_KEY"),
+  )?.replace(/\s+/g, "");
+
+  return { url, anonKey, serviceRoleKey };
+}
+
+export function describeSupabaseEnv(): {
+  urlPresent: boolean;
+  url: string | null;
+  urlRef: string | null;
+  anonPresent: boolean;
+  serviceRolePresent: boolean;
+  serviceRoleLen: number;
+  serviceRoleRef: string | null;
+  serviceRoleRole: string | null;
+  urlMatchesKey: boolean | null;
+} {
+  const env = getSupabaseServerEnv();
+  const urlRef =
+    env.url?.match(/^https:\/\/([a-z0-9]+)\.supabase\.co$/i)?.[1] ?? null;
+  const payload = env.serviceRoleKey
+    ? decodeJwtPayload(env.serviceRoleKey)
+    : null;
+  const serviceRoleRef = typeof payload?.ref === "string" ? payload.ref : null;
   return {
-    url: url?.replace(/\/+$/, ""),
-    anonKey: anonKey?.replace(/\s+/g, ""),
-    serviceRoleKey,
+    urlPresent: Boolean(env.url),
+    url: env.url ?? null,
+    urlRef,
+    anonPresent: Boolean(env.anonKey),
+    serviceRolePresent: Boolean(env.serviceRoleKey),
+    serviceRoleLen: env.serviceRoleKey?.length ?? 0,
+    serviceRoleRef,
+    serviceRoleRole: typeof payload?.role === "string" ? payload.role : null,
+    urlMatchesKey: urlRef && serviceRoleRef ? urlRef === serviceRoleRef : null,
   };
 }
 
@@ -197,22 +201,9 @@ function parseCsvIds(raw: string | undefined): string[] {
 
 /** Chave Stripe para métricas do dashboard (server-only). */
 export function getStripeServerEnv(): StripeServerEnv {
-  const g = globalThis as typeof globalThis & {
-    cloudflare?: { env?: Record<string, string | undefined> };
-  };
-  const cf = g.cloudflare?.env;
-  const fromProcess =
-    typeof process !== "undefined" && process.env ? process.env : undefined;
-
   return {
-    secretKey: stripEnvNoise(
-      cf?.STRIPE_SECRET_KEY ?? fromProcess?.STRIPE_SECRET_KEY,
-    ),
-    wagooPriceIds: parseCsvIds(
-      cf?.STRIPE_WAGOO_PRICE_IDS ?? fromProcess?.STRIPE_WAGOO_PRICE_IDS,
-    ),
-    avendasPriceIds: parseCsvIds(
-      cf?.STRIPE_2AVENDAS_PRICE_IDS ?? fromProcess?.STRIPE_2AVENDAS_PRICE_IDS,
-    ),
+    secretKey: envGet("STRIPE_SECRET_KEY"),
+    wagooPriceIds: parseCsvIds(envGet("STRIPE_WAGOO_PRICE_IDS")),
+    avendasPriceIds: parseCsvIds(envGet("STRIPE_2AVENDAS_PRICE_IDS")),
   };
 }

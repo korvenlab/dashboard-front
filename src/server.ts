@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { handleDashboardAuthApi } from "./lib/dashboard-auth.api";
 import { handleDashboardAdminApi } from "./lib/dashboard-admin.api";
+import { handleDashboardCentralApi } from "./lib/dashboard-central.api";
 import { handleDashboardMetricsApi } from "./lib/dashboard-metrics.api";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
@@ -117,6 +118,9 @@ export default {
     try {
       const authResponse = await handleDashboardAuthApi(request);
       if (authResponse) return withSecurityHeaders(authResponse);
+
+      const centralResponse = await handleDashboardCentralApi(request);
+      if (centralResponse) return withSecurityHeaders(centralResponse);
 
       const metricsResponse = await handleDashboardMetricsApi(request);
       if (metricsResponse) return withSecurityHeaders(metricsResponse);

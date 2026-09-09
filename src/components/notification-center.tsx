@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, Bell, Check, RefreshCw } from "lucide-react";
 import {
-  fetchNotifications,
-  fetchSupabasePublicConfig,
-  mutateNotification,
-} from "@/lib/central-api";
+  fetchNotificationsHttp,
+  fetchSupabasePublicConfigHttp,
+  mutateNotificationHttp,
+} from "@/lib/central-http";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Notification } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -28,11 +28,7 @@ export function NotificationCenter() {
     setLoading(true);
     setError(null);
     try {
-      setItems(
-        (await fetchNotifications({
-          data: { includeArchived: false },
-        })) as Notification[],
-      );
+      setItems(await fetchNotificationsHttp(false));
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -48,10 +44,9 @@ export function NotificationCenter() {
     // O polling protegido mantém as notificações atualizadas mesmo quando o
     // canal Realtime anônimo é corretamente bloqueado pelas políticas RLS.
     const polling = window.setInterval(() => void refresh(), 15_000);
-    void fetchSupabasePublicConfig({ data: {} })
-      .then((rawConfig) => {
+    void fetchSupabasePublicConfigHttp()
+      .then((config) => {
         if (disposed) return;
-        const config = rawConfig as { url: string; anonKey: string };
         const client = getSupabaseBrowserClient(config);
         const channel = client
           .channel("dashboard-notifications")
@@ -77,7 +72,7 @@ export function NotificationCenter() {
     setBusyId(id);
     setError(null);
     try {
-      await mutateNotification({ data: { id, action } });
+      await mutateNotificationHttp({ id, action });
       await refresh();
     } catch (cause) {
       setError(errorMessage(cause));
