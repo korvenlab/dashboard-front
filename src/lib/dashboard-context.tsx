@@ -69,7 +69,11 @@ export function KorvenDashboardProvider({
       });
       setDashboard(result);
       setLoadedOnce(true);
-      if (result.meta.source === "fallback" && result.meta.message) {
+      if (
+        (result.meta.source === "fallback" ||
+          result.meta.source === "stripe-legacy") &&
+        result.meta.message
+      ) {
         setError(result.meta.message);
       }
     } catch (e) {
@@ -93,6 +97,10 @@ export function KorvenDashboardProvider({
     search.chart_days,
     onSessionExpired,
   ]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const value = useMemo(
     () => ({ dashboard, loading, error, loadedOnce, refresh }),
