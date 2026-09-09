@@ -1,6 +1,6 @@
 import type { AppEvent, Kpi } from "@/lib/metrics";
 
-export type DashboardSource = "api" | "fallback";
+export type DashboardSource = "supabase" | "stripe-legacy" | "api" | "fallback";
 
 export type DashboardMeta = {
   source: DashboardSource;
@@ -435,7 +435,7 @@ export function mergeDualDashboardViewModels(
   const ui = mergeUiConfigs(wagoo?.ui, avendas?.ui);
 
   const source: DashboardSource =
-    wagoo?.meta.source === "api" || avendas?.meta.source === "api" ? "api" : "fallback";
+    wagoo?.meta.source !== "fallback" || avendas?.meta.source !== "fallback" ? "api" : "fallback";
 
   const msgParts = [
     ...warnings,

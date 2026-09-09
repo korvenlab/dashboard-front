@@ -22,6 +22,13 @@ export type StripeServerEnv = {
   avendasPriceIds: string[];
 };
 
+export type SupabaseServerEnv = {
+  url: string | undefined;
+  anonKey: string | undefined;
+  /** Nunca deve ser serializada ou importada por código de browser. */
+  serviceRoleKey: string | undefined;
+};
+
 function readEnvPair(
   keys: { url: string; key: string },
   cfEnv?: Record<string, string | undefined>,
@@ -36,11 +43,15 @@ function readEnvPair(
 
   return {
     apiBaseUrl: stripEnvNoise(cfEnv?.[keys.url] ?? fromProcess.apiBaseUrl),
-    metricsApiKey: stripEnvNoise(cfEnv?.[keys.key] ?? fromProcess.metricsApiKey),
+    metricsApiKey: stripEnvNoise(
+      cfEnv?.[keys.key] ?? fromProcess.metricsApiKey,
+    ),
   };
 }
 
-function firstNonEmptyTrimmed(...vals: (string | undefined)[]): string | undefined {
+function firstNonEmptyTrimmed(
+  ...vals: (string | undefined)[]
+): string | undefined {
   for (const v of vals) {
     const cleaned = stripEnvNoise(typeof v === "string" ? v : undefined);
     if (cleaned) return cleaned;
@@ -68,7 +79,10 @@ function readProcessEnv(key: string): string | undefined {
   return stripEnvNoise(process.env[key]);
 }
 
-function readCfOrProcess(cf: Record<string, string | undefined> | undefined, key: string): string | undefined {
+function readCfOrProcess(
+  cf: Record<string, string | undefined> | undefined,
+  key: string,
+): string | undefined {
   return stripEnvNoise(cf?.[key] ?? readProcessEnv(key));
 }
 
@@ -135,6 +149,19 @@ export function getDashboardBackendEnv(): DashboardBackendEnv {
   );
 }
 
+/** Configuração canônica do banco central. Sem aliases para evitar apontar ao projeto errado. */
+export function getSupabaseServerEnv(): SupabaseServerEnv {
+  const g = globalThis as typeof globalThis & {
+    cloudflare?: { env?: Record<string, string | undefined> };
+  };
+  const cf = g.cloudflare?.env;
+  return {
+    url: readCfOrProcess(cf, "SUPABASE_URL"),
+    anonKey: readCfOrProcess(cf, "SUPABASE_ANON_KEY"),
+    serviceRoleKey: readCfOrProcess(cf, "SUPABASE_SERVICE_ROLE_KEY"),
+  };
+}
+
 function parseCsvIds(raw: string | undefined): string[] {
   const cleaned = stripEnvNoise(raw);
   if (!cleaned) return [];
@@ -154,8 +181,12 @@ export function getStripeServerEnv(): StripeServerEnv {
     typeof process !== "undefined" && process.env ? process.env : undefined;
 
   return {
-    secretKey: stripEnvNoise(cf?.STRIPE_SECRET_KEY ?? fromProcess?.STRIPE_SECRET_KEY),
-    wagooPriceIds: parseCsvIds(cf?.STRIPE_WAGOO_PRICE_IDS ?? fromProcess?.STRIPE_WAGOO_PRICE_IDS),
+    secretKey: stripEnvNoise(
+      cf?.STRIPE_SECRET_KEY ?? fromProcess?.STRIPE_SECRET_KEY,
+    ),
+    wagooPriceIds: parseCsvIds(
+      cf?.STRIPE_WAGOO_PRICE_IDS ?? fromProcess?.STRIPE_WAGOO_PRICE_IDS,
+    ),
     avendasPriceIds: parseCsvIds(
       cf?.STRIPE_2AVENDAS_PRICE_IDS ?? fromProcess?.STRIPE_2AVENDAS_PRICE_IDS,
     ),

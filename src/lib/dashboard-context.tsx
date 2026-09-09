@@ -17,7 +17,7 @@ type KorvenDashboardContextValue = {
   loading: boolean;
   error: string | null;
   loadedOnce: boolean;
-  /** Busca métricas Wagoo + 2AVENDAS na Stripe (só no botão Atualizar). */
+  /** Busca a RPC central; usa Stripe somente como fallback legado. */
   refresh: () => Promise<void>;
 };
 
@@ -25,11 +25,13 @@ function sessionExpiredMessage(msg: string): boolean {
   return /sessão expirada|não autorizado|unauthorized/i.test(msg);
 }
 
-const KorvenDashboardContext = createContext<KorvenDashboardContextValue | null>(null);
+const KorvenDashboardContext =
+  createContext<KorvenDashboardContextValue | null>(null);
 
 function filtersKey(search: RootSearch): string {
   return [
     search.organization_id ?? "",
+    search.product_slug ?? "",
     search.period_days ?? 30,
     search.chart_days ?? 14,
   ].join("|");
@@ -60,10 +62,11 @@ export function KorvenDashboardProvider({
     setError(null);
     try {
       const result = await fetchDashboardMetrics({
-          organization_id: search.organization_id,
-          period_days: search.period_days ?? 30,
-          chart_days: search.chart_days ?? 14,
-        });
+        organization_id: search.organization_id,
+        product_slug: search.product_slug,
+        period_days: search.period_days ?? 30,
+        chart_days: search.chart_days ?? 14,
+      });
       setDashboard(result);
       setLoadedOnce(true);
       if (result.meta.source === "fallback" && result.meta.message) {
@@ -71,7 +74,9 @@ export function KorvenDashboardProvider({
       }
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
-      const msg = sessionExpiredMessage(raw) ? "Sessão expirada. Faça login novamente." : raw;
+      const msg = sessionExpiredMessage(raw)
+        ? "Sessão expirada. Faça login novamente."
+        : raw;
       setError(msg);
       setDashboard(null);
       setLoadedOnce(true);
@@ -81,7 +86,13 @@ export function KorvenDashboardProvider({
     } finally {
       setLoading(false);
     }
-  }, [search.organization_id, search.period_days, search.chart_days, onSessionExpired]);
+  }, [
+    search.organization_id,
+    search.product_slug,
+    search.period_days,
+    search.chart_days,
+    onSessionExpired,
+  ]);
 
   const value = useMemo(
     () => ({ dashboard, loading, error, loadedOnce, refresh }),
@@ -89,19 +100,27 @@ export function KorvenDashboardProvider({
   );
 
   return (
-    <KorvenDashboardContext.Provider value={value}>{children}</KorvenDashboardContext.Provider>
+    <KorvenDashboardContext.Provider value={value}>
+      {children}
+    </KorvenDashboardContext.Provider>
   );
 }
 
 export function useKorvenDashboard(): KorvenDashboardContextValue {
   const ctx = useContext(KorvenDashboardContext);
   if (!ctx) {
-    throw new Error("useKorvenDashboard deve ser usado dentro de KorvenDashboardProvider");
+    throw new Error(
+      "useKorvenDashboard deve ser usado dentro de KorvenDashboardProvider",
+    );
   }
   return ctx;
 }
 
-export function KorvenDashboardEmptyHint({ className }: { className?: string }) {
+export function KorvenDashboardEmptyHint({
+  className,
+}: {
+  className?: string;
+}) {
   const { loading, error } = useKorvenDashboard();
   return (
     <div
@@ -112,10 +131,13 @@ export function KorvenDashboardEmptyHint({ className }: { className?: string }) 
     >
       <p className="text-foreground">Nenhum dado carregado ainda.</p>
       <p className="mt-2 text-xs leading-relaxed">
-        Use o botão <strong className="text-primary">Atualizar</strong> na barra superior para buscar métricas na
-        Stripe (Wagoo + 2AVENDAS). Alterar organização ou período também exige um novo clique em Atualizar.
+        Use o botão <strong className="text-primary">Atualizar</strong> na barra
+        superior para buscar métricas na RPC central. Alterar produto ou período
+        também exige um novo clique em Atualizar.
       </p>
-      {loading ? <p className="mt-4 text-xs text-primary">Carregando…</p> : null}
+      {loading ? (
+        <p className="mt-4 text-xs text-primary">Carregando…</p>
+      ) : null}
       {error ? <p className="mt-4 text-xs text-rose-400">{error}</p> : null}
     </div>
   );

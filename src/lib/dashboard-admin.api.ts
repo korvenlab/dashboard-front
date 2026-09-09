@@ -30,15 +30,22 @@ function jsonOk(body: unknown, status = 200): Response {
 }
 
 function jsonError(message: string, status = 500): Response {
-  return new Response(JSON.stringify({ error: message }), { status, headers: JSON_HEADERS });
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: JSON_HEADERS,
+  });
 }
 
 /** Lista roles via rota HTTP (mesmo runtime que métricas Stripe). */
-async function listAdminRolesHttp(source: AdminSource): Promise<AdminRolesResult> {
+async function listAdminRolesHttp(
+  source: AdminSource,
+): Promise<AdminRolesResult> {
   return listAdminRoles(source);
 }
 
-export async function handleDashboardAdminApi(request: Request): Promise<Response | null> {
+export async function handleDashboardAdminApi(
+  request: Request,
+): Promise<Response | null> {
   const url = new URL(request.url);
   const { pathname } = url;
 
@@ -46,7 +53,10 @@ export async function handleDashboardAdminApi(request: Request): Promise<Respons
     return null;
   }
 
-  if (isDashboardAuthConfigured() && !isDashboardRequestAuthenticated(request)) {
+  if (
+    !isDashboardAuthConfigured() ||
+    !isDashboardRequestAuthenticated(request)
+  ) {
     return unauthorized();
   }
 

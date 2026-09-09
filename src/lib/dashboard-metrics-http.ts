@@ -2,6 +2,7 @@ import type { DashboardViewModel } from "@/lib/dashboard-view";
 
 export type DashboardMetricsQuery = {
   organization_id?: string;
+  product_slug?: string;
   period_days?: number;
   chart_days?: number;
 };
@@ -26,7 +27,11 @@ function assertDashboardViewModel(json: unknown): DashboardViewModel {
     throw new Error("Formato de métricas inválido.");
   }
   const record = json as Record<string, unknown>;
-  if (!record.meta || typeof record.meta !== "object" || !Array.isArray(record.kpis)) {
+  if (
+    !record.meta ||
+    typeof record.meta !== "object" ||
+    !Array.isArray(record.kpis)
+  ) {
     throw new Error("Resposta de métricas incompleta.");
   }
   return json as DashboardViewModel;
@@ -36,7 +41,9 @@ export async function fetchDashboardMetrics(
   query: DashboardMetricsQuery,
 ): Promise<DashboardViewModel> {
   const params = new URLSearchParams();
-  if (query.organization_id) params.set("organization_id", query.organization_id);
+  if (query.organization_id)
+    params.set("organization_id", query.organization_id);
+  if (query.product_slug) params.set("product_slug", query.product_slug);
   params.set("period_days", String(query.period_days ?? 30));
   params.set("chart_days", String(query.chart_days ?? 14));
 
@@ -54,7 +61,9 @@ export async function fetchDashboardMetrics(
     });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
-      throw new Error("Tempo esgotado ao buscar métricas na Stripe. Tente novamente.");
+      throw new Error(
+        "Tempo esgotado ao buscar métricas na Stripe. Tente novamente.",
+      );
     }
     throw e;
   } finally {
@@ -70,7 +79,10 @@ export async function fetchDashboardMetrics(
 
   if (!res.ok) {
     const err =
-      json && typeof json === "object" && "error" in json && typeof (json as { error: unknown }).error === "string"
+      json &&
+      typeof json === "object" &&
+      "error" in json &&
+      typeof (json as { error: unknown }).error === "string"
         ? (json as { error: string }).error
         : `Falha ao carregar métricas (${res.status}).`;
     throw new Error(err);

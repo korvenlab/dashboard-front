@@ -1,704 +1,415 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { ExternalLink, RefreshCw, Search, X } from "lucide-react";
 import {
-  deleteAdminUser,
-  fetchAdminUserAssets,
-  patchAdminUserRole,
-  patchAdminUserStatus,
-  patchWagooUserComplimentaryAccess,
-  patchWagooUserSubscriptionTier,
-  wagooComplimentaryIsActive,
-  wagooFormatComplimentaryRemaining,
-  type AdminRoleOption,
-  type AdminRolesResult,
-  type AdminSource,
-  type AdminUser,
-  type AdminUserAsset,
-} from "@/lib/admin-api";
-import { fetchAdminRolesHttp, fetchAdminUsersHttp } from "@/lib/admin-http";
+  createCentralAccessLink,
+  executeCentralAdminCommand,
+  fetchUnifiedUserDetails,
+  fetchUnifiedUsers,
+} from "@/lib/central-api";
+import type {
+  UnifiedUser,
+  UnifiedUserDetails,
+  UnifiedUsersPage,
+} from "@/lib/supabase/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-export const Route = createFileRoute("/admin")({
-  component: AdminPage,
-});
+export const Route = createFileRoute("/admin")({ component: AdminPage });
 
-const WAGOO_TIER_OPTIONS = [
-  { value: "basic", label: "Basic — R$ 59 (1 usuário)" },
-  { value: "pro", label: "Pro — R$ 149 (até 3 usuários)" },
-  { value: "pro_plus", label: "Pro+ — R$ 259 (até 5 usuários)" },
-  { value: "none", label: "Revogar plano (sem assinatura)" },
-] as const;
+type ActionState = { state: "pending" | "success" | "error"; message: string };
+type Command =
+  "role.set" | "status.set" | "plan.set" | "access.grant" | "user.delete";
 
-const WAGOO_COMPLIMENTARY_PRESETS = [
-  { value: "", label: "— não alterar cortesia —" },
-  { value: "none", label: "Sem cortesia (revogar)" },
-  { value: "7", label: "+7 dias" },
-  { value: "30", label: "+30 dias" },
-  { value: "60", label: "+60 dias" },
-  { value: "90", label: "+90 dias" },
-  { value: "180", label: "+180 dias" },
-  { value: "365", label: "+365 dias" },
-] as const;
-
-function WagooComplimentaryUntilCell({ until }: { until: string | null | undefined }) {
-  if (!until) return "—";
-  const ms = new Date(String(until)).getTime();
-  if (!Number.isFinite(ms)) return "—";
-  const label = new Date(ms).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-  const active = wagooComplimentaryIsActive(until);
-  return (
-    <span className="flex flex-col gap-0.5">
-      <span>{label}</span>
-      <span className={active ? "text-emerald-400/90" : "text-rose-400/90"}>
-        {active ? "cortesia activa" : "cortesia expirada"}
-      </span>
-    </span>
-  );
-}
-
-function stringifyUnknown(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  if (e && typeof e === "object") {
-    try {
-      return JSON.stringify(e);
-    } catch {
-      return "erro desconhecido";
-    }
-  }
-  return String(e);
-}
-
-function WagooPlanStatusChip({
-  label,
-  active,
-  variant,
-}: {
-  label: string;
-  active: boolean;
-  variant: "pro" | "addon" | "cortesia";
-}) {
-  const activeClass =
-    variant === "addon"
-      ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
-      : variant === "cortesia"
-        ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
-        : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
-  const inactiveClass = "border-border bg-muted/30 text-muted-foreground";
-
-  return (
-    <span
-      className={`inline-flex rounded border px-2 py-0.5 font-mono text-[10px] ${active ? activeClass : inactiveClass}`}
-    >
-      {label}: {active ? "ativo" : "inativo"}
-    </span>
-  );
-}
-
-const TIER_CHIP_LABEL: Record<string, string> = {
-  basic: "Basic",
-  pro: "Pro",
-  pro_plus: "Pro+",
+const EMPTY_PAGE: UnifiedUsersPage = {
+  items: [],
+  page: 1,
+  limit: 25,
+  total: 0,
 };
 
-type WagooPlanSelectorsProps = {
-  subscriptionTierCurrent?: string | null;
-  complimentaryActive?: boolean;
-  tierValue: string;
-  complimentaryValue: string;
-  disabled: boolean;
-  busy: boolean;
-  onTierChange: (value: string) => void;
-  onComplimentaryChange: (value: string) => void;
-  onApply: () => void;
-};
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("pt-BR");
+}
 
-function WagooPlanSelectors({
-  subscriptionTierCurrent,
-  complimentaryActive,
-  tierValue,
-  complimentaryValue,
-  disabled,
-  busy,
-  onTierChange,
-  onComplimentaryChange,
-  onApply,
-}: WagooPlanSelectorsProps) {
-  const selectClass =
-    "h-7 w-full max-w-[240px] rounded border border-border bg-card px-2 font-mono text-[10px]";
-
-  const tierLabel = subscriptionTierCurrent
-    ? TIER_CHIP_LABEL[subscriptionTierCurrent] ?? subscriptionTierCurrent
-    : "Sem plano";
-
-  return (
-    <div className="flex min-w-[220px] flex-col gap-2.5">
-      <div className="flex flex-wrap gap-1.5">
-        <WagooPlanStatusChip
-          label={tierLabel}
-          active={Boolean(subscriptionTierCurrent)}
-          variant="pro"
-        />
-        {complimentaryActive !== undefined ? (
-          <WagooPlanStatusChip label="Cortesia" active={complimentaryActive} variant="cortesia" />
-        ) : null}
-      </div>
-      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Alterar plano Wagoo
-        <select
-          className={selectClass}
-          value={tierValue}
-          disabled={disabled}
-          onChange={(e) => onTierChange(e.target.value)}
-        >
-          <option value="">— não alterar —</option>
-          {WAGOO_TIER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Cortesia de acesso
-        <select
-          className={selectClass}
-          value={complimentaryValue}
-          disabled={disabled}
-          onChange={(e) => onComplimentaryChange(e.target.value)}
-        >
-          {WAGOO_COMPLIMENTARY_PRESETS.map((p) => (
-            <option key={p.value || "keep"} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        className="h-8 rounded border border-primary bg-primary/15 px-3 font-mono text-[10px] font-semibold text-primary hover:bg-primary/25 disabled:opacity-50"
-        disabled={disabled}
-        onClick={onApply}
-      >
-        {busy ? "Salvando…" : "Aplicar alterações"}
-      </button>
-    </div>
-  );
+function statusTone(status: string | null) {
+  const value = status?.toLowerCase();
+  if (value === "active" || value === "ativo" || value === "paid")
+    return "border-emerald-500/50 text-emerald-300";
+  if (value === "past_due" || value === "pending" || value === "pendente")
+    return "border-amber-500/50 text-amber-300";
+  return "border-border text-muted-foreground";
 }
 
 function AdminPage() {
-  const [source, setSource] = useState<AdminSource>("wagoo");
-  const [pageSource, setPageSource] = useState<AdminSource>("wagoo");
+  const [page, setPage] = useState<UnifiedUsersPage>(EMPTY_PAGE);
   const [search, setSearch] = useState("");
-  const [pageData, setPageData] = useState<{ items: AdminUser[]; page: number; limit: number; total: number }>({
-    items: [],
-    page: 1,
-    limit: 20,
-    total: 0,
-  });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string>("");
-  const [assets, setAssets] = useState<AdminUserAsset[] | null>(null);
-  const [roles, setRoles] = useState<AdminRoleOption[]>([]);
-  const [rolesFromFallback, setRolesFromFallback] = useState(false);
-  const [rolesFallbackReason, setRolesFallbackReason] = useState<string>("");
-  const [roleDraftByUser, setRoleDraftByUser] = useState<Record<string, string>>({});
-  const [busyActionByUser, setBusyActionByUser] = useState<Record<string, string>>({});
-  const [tierDraftByUser, setTierDraftByUser] = useState<Record<string, string>>({});
-  const [complimentaryDraftByUser, setComplimentaryDraftByUser] = useState<Record<string, string>>({});
+  const [product, setProduct] = useState("");
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<UnifiedUserDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [actionByUser, setActionByUser] = useState<Record<string, ActionState>>(
+    {},
+  );
 
-  function setUserBusy(userId: string, label: string) {
-    setBusyActionByUser((prev) => ({ ...prev, [userId]: label }));
-  }
+  const load = useCallback(
+    async (targetPage = 1) => {
+      setLoading(true);
+      setError(null);
+      try {
+        setPage(
+          (await fetchUnifiedUsers({
+            data: {
+              search: search.trim() || undefined,
+              product: product || undefined,
+              status: status || undefined,
+              page: targetPage,
+              limit: 25,
+            },
+          })) as UnifiedUsersPage,
+        );
+      } catch (cause) {
+        setPage(EMPTY_PAGE);
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [product, search, status],
+  );
 
-  function clearUserBusy(userId: string) {
-    setBusyActionByUser((prev) => {
-      if (!(userId in prev)) return prev;
-      const next = { ...prev };
-      delete next[userId];
-      return next;
-    });
-  }
+  useEffect(() => {
+    void load(1);
+  }, [load]);
 
-  async function load(page = 1, sourceOverride?: AdminSource) {
-    const targetSource = sourceOverride ?? source;
-    setLoading(true);
-    setMessage("");
+  async function openDetails(user: UnifiedUser) {
+    setDetailsLoading(true);
+    setError(null);
     try {
-      const data = await fetchAdminUsersHttp({
-        source: targetSource,
-        search: search.trim() || undefined,
-        page,
-        limit: 20,
-      });
-      setPageData(data);
-      setPageSource(targetSource);
-      setTierDraftByUser({});
-      setComplimentaryDraftByUser({});
-      setAssets(null);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-      setPageData({ items: [], page: 1, limit: 20, total: 0 });
+      setSelected(
+        (await fetchUnifiedUserDetails({
+          data: { userId: user.id },
+        })) as UnifiedUserDetails,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setLoading(false);
+      setDetailsLoading(false);
     }
   }
 
-  async function toggleActive(user: AdminUser) {
-    const actionSource = pageSource;
-    setUserBusy(user.id, "status");
-    setMessage("");
-    try {
-      await patchAdminUserStatus({
-        data: { source: actionSource, id: user.id, active: !user.active },
-      });
-      await load(pageData.page, actionSource);
-      setMessage(`Status atualizado para ${user.email ?? user.id}.`);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-    } finally {
-      clearUserBusy(user.id);
-    }
-  }
-
-  async function makeAdmin(user: AdminUser) {
-    const actionSource = pageSource;
-    const nextRole = roleDraftByUser[user.id] ?? user.role;
-    setUserBusy(user.id, "role");
-    setMessage("");
-    try {
-      await patchAdminUserRole({
-        data: { source: actionSource, id: user.id, role: nextRole },
-      });
-      await load(pageData.page, actionSource);
-      setMessage(`Role atualizada para ${user.email ?? user.id}.`);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-    } finally {
-      clearUserBusy(user.id);
-    }
-  }
-
-  async function applyWagooPlans(user: AdminUser) {
-    const tierDraft = tierDraftByUser[user.id]?.trim() ?? "";
-    const cortesiaDraft = complimentaryDraftByUser[user.id]?.trim() ?? "";
-
-    if (!tierDraft && !cortesiaDraft) {
-      setMessage("Seleccione pelo menos um plano para alterar.");
+  async function command(
+    user: UnifiedUser,
+    value: Command,
+    productSlug: string,
+    params: Record<string, unknown> = {},
+  ) {
+    if (productSlug !== "wagoo" && productSlug !== "2avendas") {
+      setActionByUser((current) => ({
+        ...current,
+        [user.id]: { state: "error", message: "Produto inválido." },
+      }));
       return;
     }
-
-    setUserBusy(user.id, "planos");
-    setMessage("");
-    const changes: string[] = [];
-
+    setActionByUser((current) => ({
+      ...current,
+      [user.id]: { state: "pending", message: value },
+    }));
     try {
-      if (tierDraft) {
-        const wantTier =
-          tierDraft === "none"
-            ? null
-            : (tierDraft as "basic" | "pro" | "pro_plus");
-        const current = user.subscriptionTier ?? user.subscription_tier ?? null;
-        if (wantTier !== current) {
-          await patchWagooUserSubscriptionTier({
-            data: { source: "wagoo", id: user.id, subscriptionTier: wantTier },
-          });
-          changes.push(
-            wantTier
-              ? `${TIER_CHIP_LABEL[wantTier] ?? wantTier} activo`
-              : "plano revogado",
-          );
-        }
-      }
-
-      if (cortesiaDraft) {
-        await patchWagooUserComplimentaryAccess({
-          data: {
-            source: "wagoo",
-            id: user.id,
-            preset: cortesiaDraft as "none" | "7" | "30" | "60" | "90" | "180" | "365",
-          },
-        });
-        changes.push(`cortesia (${cortesiaDraft === "none" ? "revogada" : `+${cortesiaDraft}d`})`);
-      }
-
-      await load(pageData.page, "wagoo");
-      if (changes.length) {
-        setMessage(`Planos actualizados (${user.email ?? user.id}): ${changes.join(", ")}.`);
-      } else {
-        setMessage("Nenhuma alteração em relação ao estado actual.");
-      }
-    } catch (e) {
-      setMessage(stringifyUnknown(e));
-    } finally {
-      clearUserBusy(user.id);
+      const result = (await executeCentralAdminCommand({
+        data: { userId: user.id, productSlug, action: value, params },
+      })) as { ok: boolean; commandId?: string; message?: string };
+      setActionByUser((current) => ({
+        ...current,
+        [user.id]: {
+          state: "success",
+          message: result.message ?? "Comando concluído.",
+        },
+      }));
+      await load(page.page);
+      if (selected?.user.id === user.id) await openDetails(user);
+    } catch (cause) {
+      setActionByUser((current) => ({
+        ...current,
+        [user.id]: {
+          state: "error",
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      }));
     }
   }
 
-  async function permanentlyDeleteAccount(user: AdminUser) {
-    const actionSource = pageSource;
-    const ok = confirm(
-      `Apagar a conta ${user.email ?? user.id} permanentemente do banco e da autenticação? Esta ação não pode ser desfeita.`,
-    );
-    if (!ok) return;
-    setUserBusy(user.id, "delete");
-    setMessage("");
+  async function accessLink(user: UnifiedUser, productSlug: string) {
+    setActionByUser((current) => ({
+      ...current,
+      [user.id]: { state: "pending", message: "access-link" },
+    }));
     try {
-      await deleteAdminUser({ data: { source: actionSource, id: user.id } });
-      await load(pageData.page, actionSource);
-      setMessage(`Conta ${user.email ?? user.id} removida permanentemente.`);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-    } finally {
-      clearUserBusy(user.id);
+      const result = (await createCentralAccessLink({
+        data: { userId: user.id, productSlug },
+      })) as { url: string; expiresAt: string | null };
+      await navigator.clipboard.writeText(result.url);
+      setActionByUser((current) => ({
+        ...current,
+        [user.id]: {
+          state: "success",
+          message: "Link copiado para a área de transferência.",
+        },
+      }));
+    } catch (cause) {
+      setActionByUser((current) => ({
+        ...current,
+        [user.id]: {
+          state: "error",
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      }));
     }
   }
 
-  async function viewAssets(user: AdminUser) {
-    const actionSource = pageSource;
-    setUserBusy(user.id, "assets");
-    setMessage("");
-    try {
-      const items = (await fetchAdminUserAssets({
-        data: { source: actionSource, id: user.id },
-      })) as AdminUserAsset[];
-      setAssets(items);
-      setMessage(items.length ? "" : "Sem assets para este usuário.");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-      setAssets([]);
-    } finally {
-      clearUserBusy(user.id);
-    }
-  }
-
-  const totalPages = Math.max(1, Math.ceil((pageData.total || 0) / pageData.limit));
-  const roleLabelBySlug = new Map(roles.map((r) => [r.value, r.label]));
-  const rolePermissionsBySlug = new Map(roles.map((r) => [r.value, r.permissions ?? []]));
-
-  useEffect(() => {
-    let cancelled = false;
-    setPageData({ items: [], page: 1, limit: 20, total: 0 });
-    setAssets(null);
-    void load(1, source);
-    if (source === "2avendas") {
-      void (async () => {
-        try {
-          const result = await fetchAdminRolesHttp(source);
-          if (cancelled) return;
-          setRoles(result.items);
-          setRolesFromFallback(result.fromFallback);
-          const fr = result.fallbackReason;
-          setRolesFallbackReason(
-            typeof fr === "string" ? fr : fr != null ? JSON.stringify(fr) : "",
-          );
-        } catch (e) {
-          if (cancelled) return;
-          setRoles([]);
-          setRolesFromFallback(false);
-          setRolesFallbackReason("");
-          setMessage(e instanceof Error ? e.message : stringifyUnknown(e));
-        }
-      })();
-    } else {
-      setRoles([]);
-      setRolesFromFallback(false);
-      setRolesFallbackReason("");
-    }
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
-
-  useEffect(() => {
-    const nextRole: Record<string, string> = {};
-    for (const u of pageData.items) {
-      nextRole[u.id] = u.role;
-    }
-    setRoleDraftByUser(nextRole);
-  }, [pageData.items]);
-
-  const sourceSwitching = source !== pageSource;
-  const wagooTableColSpan = 12;
-  const avendasTableColSpan = 7;
+  const products = useMemo(
+    () => [...new Set(page.items.flatMap((user) => user.products))].sort(),
+    [page.items],
+  );
+  const totalPages = Math.max(1, Math.ceil(page.total / page.limit));
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Admin Console</h1>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Gerenciamento de usuários por app (Wagoo e 2AVendas), usando APIs admin server-side.
-        </p>
-        <p className="mt-2 max-w-3xl font-mono text-[11px] leading-relaxed text-muted-foreground">
-          Nas duas origens o contrato é o mesmo: desativar só corta o acesso (sem marcar exclusão lógica);
-          apagar conta remove o usuário em Supabase Auth e o que o banco apagar em cascata (wag-backend e 2A-back).
-        </p>
-      </div>
-
-      <section className="rounded border border-border bg-card/40 p-3">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">App</div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`rounded border px-3 py-1 font-mono text-xs ${
-              source === "wagoo" ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground"
-            }`}
-            onClick={() => setSource("wagoo")}
-          >
-            Wagoo
-          </button>
-          <button
-            className={`rounded border px-3 py-1 font-mono text-xs ${
-              source === "2avendas" ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground"
-            }`}
-            onClick={() => setSource("2avendas")}
-          >
-            2AVendas
-          </button>
+    <div className="space-y-6 p-6 lg:p-10">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary">
+            Supabase central
+          </p>
+          <h1 className="mt-1 font-mono text-xl font-semibold uppercase tracking-[0.2em]">
+            Usuários unificados
+          </h1>
+          <p className="mt-2 max-w-3xl text-xs text-muted-foreground">
+            Identidade canônica, contas por produto, acesso e cobrança. Ações
+            são processadas pelas Edge Functions centrais.
+          </p>
         </div>
-        {source === "wagoo" ? (
-          <div className="mt-3 max-w-3xl rounded border border-primary/35 bg-primary/5 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground/90">
-            <span className="font-semibold uppercase tracking-wider text-primary">Wagoo — planos</span>
-            <span className="mx-1.5 text-muted-foreground">·</span>
-            Planos: <strong className="text-foreground">Basic</strong> (1 usuário, R$ 59),{" "}
-            <strong className="text-foreground">Pro</strong> (até 3, R$ 149),{" "}
-            <strong className="text-foreground">Pro+</strong> (até 5, R$ 259). Chips mostram o plano actual; nos
-            selects escolha só o que quiser mudar e clique em{" "}
-            <span className="text-foreground">Aplicar alterações</span>.
-          </div>
-        ) : null}
-      </section>
-
-      <section className="flex flex-wrap items-end gap-2 rounded border border-border bg-card/40 p-3">
-        <div className="flex min-w-[260px] flex-col gap-1">
-          <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Buscar por email</label>
-          <input
-            className="h-8 rounded border border-border bg-card px-2 font-mono text-xs"
-            placeholder="ex: user@dominio.com"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        <Button
+          variant="outline"
+          className="rounded-none font-mono text-xs"
+          disabled={loading}
+          onClick={() => void load(page.page)}
+        >
+          <RefreshCw
+            className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
           />
-        </div>
-        <button
-          className="h-8 rounded border border-border bg-card px-3 font-mono text-xs"
-          onClick={() => load(1)}
+          Atualizar
+        </Button>
+      </header>
+
+      <form
+        className="grid gap-3 rounded-none border border-border bg-card/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_180px_auto]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(1);
+        }}
+      >
+        <label className="space-y-1">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Buscar
+          </span>
+          <div className="flex h-9 items-center border border-border bg-background px-2">
+            <Search className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              className="w-full bg-transparent font-mono text-xs outline-none"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="nome ou email"
+            />
+          </div>
+        </label>
+        <Filter
+          label="Produto"
+          value={product}
+          onChange={setProduct}
+          options={products}
+        />
+        <Filter
+          label="Status"
+          value={status}
+          onChange={setStatus}
+          options={["active", "inactive", "pending", "past_due"]}
+        />
+        <Button
+          type="submit"
+          className="mt-auto h-9 rounded-none font-mono text-xs"
           disabled={loading}
         >
-          {loading ? "Carregando..." : "Buscar"}
-        </button>
-      </section>
+          Aplicar filtros
+        </Button>
+      </form>
 
-      {message ? (
-        <div className="rounded border border-chart-2/60 bg-chart-2/10 px-3 py-2 font-mono text-xs text-chart-2">
-          {message}
-        </div>
-      ) : null}
-      {source === "2avendas" && pageSource === "2avendas" && rolesFromFallback ? (
-        <div className="rounded border border-chart-4/60 bg-chart-4/10 px-3 py-2 font-mono text-xs text-chart-4">
-          {source}: fallback de roles ativo. Motivo:{" "}
-          {rolesFallbackReason.trim() || "backend não expôs /api/admin/roles"}.
+      {error ? (
+        <div className="border border-rose-500/50 bg-rose-500/10 p-3 font-mono text-xs text-rose-300">
+          {error}
         </div>
       ) : null}
 
-      <section className="overflow-x-auto rounded border border-border">
-        <table
-          className={`w-full border-collapse ${pageSource === "wagoo" ? "min-w-[1320px]" : "min-w-[900px]"}`}
-        >
-          <thead>
-            <tr className="border-b border-border bg-card">
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Email</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Nome</th>
-              {pageSource === "wagoo" ? (
-                <>
-                  <th className="min-w-[220px] px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                    Planos
-                  </th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Equipe</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Acesso</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Cortesia até</th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                    Origem do acesso
-                  </th>
-                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Tempo restante</th>
-                </>
-              ) : (
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Role</th>
-              )}
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Status</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Último login</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Criado</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">Ações</th>
+      <section className="overflow-x-auto border border-border">
+        <table className="w-full min-w-[1050px] border-collapse">
+          <thead className="border-b border-border bg-card">
+            <tr>
+              {[
+                "Usuário canônico",
+                "Produtos / contas",
+                "Último login",
+                "Plano",
+                "Pagamento",
+                "Último sync",
+                "Ações",
+              ].map((title) => (
+                <th
+                  key={title}
+                  className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider"
+                >
+                  {title}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {pageData.items.map((u) => (
-              <tr key={u.id} className="border-b border-border/50">
-                <td className="px-3 py-2 font-mono text-xs">{u.email ?? "—"}</td>
-                <td className="px-3 py-2 font-mono text-xs">{u.name ?? "—"}</td>
-                {pageSource === "wagoo" ? (
-                  <>
-                    <td className="px-3 py-2 align-top">
-                      <WagooPlanSelectors
-                        subscriptionTierCurrent={u.subscriptionTier ?? u.subscription_tier}
-                        complimentaryActive={wagooComplimentaryIsActive(u.complimentary_access_until)}
-                        tierValue={tierDraftByUser[u.id] ?? ""}
-                        complimentaryValue={complimentaryDraftByUser[u.id] ?? ""}
-                        disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                        busy={busyActionByUser[u.id] === "planos"}
-                        onTierChange={(value) =>
-                          setTierDraftByUser((prev) => ({ ...prev, [u.id]: value }))
-                        }
-                        onComplimentaryChange={(value) =>
-                          setComplimentaryDraftByUser((prev) => ({ ...prev, [u.id]: value }))
-                        }
-                        onApply={() => void applyWagooPlans(u)}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-center font-mono text-xs text-muted-foreground">
-                      {u.barbeirosCount ?? 0}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {typeof u.hasAccess === "boolean" ? (
-                        u.hasAccess ? (
-                          <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                            sim
-                          </span>
-                        ) : (
-                          <span className="rounded border border-rose-500/50 bg-rose-500/10 px-2 py-0.5 text-rose-300">
-                            não
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="max-w-[140px] px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      <WagooComplimentaryUntilCell until={u.complimentary_access_until} />
-                    </td>
-                    <td className="max-w-[220px] px-3 py-2 align-top">
-                      <span
-                        className="block cursor-help font-mono text-[10px] leading-snug text-muted-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
-                        title={u.accessOriginDetail ?? ""}
-                      >
-                        {u.accessOriginSummary ?? "—"}
+            {page.items.map((user) => {
+              const action = actionByUser[user.id];
+              const primaryProduct = user.products[0];
+              const primaryAccount = user.product_accounts.find(
+                (account) => account.product_slug === primaryProduct,
+              );
+              const accountActive = primaryAccount?.status === "active";
+              return (
+                <tr
+                  key={user.id}
+                  className="border-b border-border/60 align-top hover:bg-card/40"
+                >
+                  <td className="px-3 py-3">
+                    <button
+                      className="text-left"
+                      onClick={() => void openDetails(user)}
+                    >
+                      <span className="block text-sm font-medium hover:text-primary">
+                        {user.name ?? "Sem nome"}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      {wagooFormatComplimentaryRemaining(u.complimentary_access_until)}
-                    </td>
-                  </>
-                ) : (
-                  <td className="px-3 py-2 font-mono text-xs">
-                    <span className="rounded border border-border/70 bg-card px-2 py-0.5">
-                      {roleLabelBySlug.get(u.role) ?? `Sem catálogo (${u.role})`}
-                    </span>
+                      <span className="block font-mono text-[10px] text-muted-foreground">
+                        {user.email ?? user.id}
+                      </span>
+                    </button>
+                    <Badge
+                      variant="outline"
+                      className={`mt-2 rounded-none font-mono text-[9px] ${statusTone(user.status)}`}
+                    >
+                      {user.status ?? "sem status"}
+                    </Badge>
                   </td>
-                )}
-                <td className="px-3 py-2 font-mono text-xs">
-                  {u.active ? (
-                    <span className="rounded border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                      ativo
-                    </span>
-                  ) : (
-                    <span className="rounded border border-rose-500/50 bg-rose-500/10 px-2 py-0.5 text-rose-300">
-                      inativo
-                    </span>
-                  )}
-                </td>
-                <td className="max-w-[140px] px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                  {u.lastSignInAt
-                    ? new Date(u.lastSignInAt).toLocaleString("pt-BR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })
-                    : "—"}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">{u.createdAt ? u.createdAt.slice(0, 10) : "—"}</td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-2">
-                    {busyActionByUser[u.id] ? (
-                      <span className="inline-flex items-center rounded border border-primary/50 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
-                        processando...
-                      </span>
-                    ) : sourceSwitching ? (
-                      <span className="inline-flex items-center rounded border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        trocando origem...
-                      </span>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {user.products.length ? (
+                        user.products.map((slug) => (
+                          <Badge
+                            key={slug}
+                            variant="secondary"
+                            className="rounded-none font-mono text-[9px]"
+                          >
+                            {slug}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Sem contas
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                      {user.product_accounts.length} conta(s)
+                    </p>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[10px] text-muted-foreground">
+                    {formatDate(user.last_login_at)}
+                  </td>
+                  <td className="px-3 py-3 font-mono text-xs">
+                    {user.plan ?? "—"}
+                  </td>
+                  <td className="px-3 py-3">
+                    <Badge
+                      variant="outline"
+                      className={`rounded-none font-mono text-[9px] ${statusTone(user.payment_status)}`}
+                    >
+                      {user.payment_status ?? "—"}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[10px] text-muted-foreground">
+                    {formatDate(user.last_synced_at)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex max-w-[330px] flex-wrap gap-1">
+                      <ActionButton
+                        disabled={
+                          !primaryProduct || action?.state === "pending"
+                        }
+                        onClick={() =>
+                          primaryProduct &&
+                          void accessLink(user, primaryProduct)
+                        }
+                      >
+                        <ExternalLink className="mr-1 h-3 w-3" />
+                        Link
+                      </ActionButton>
+                      <ActionButton
+                        disabled={
+                          !primaryProduct || action?.state === "pending"
+                        }
+                        onClick={() =>
+                          primaryProduct &&
+                          void command(user, "status.set", primaryProduct, {
+                            status: accountActive ? "inactive" : "active",
+                          })
+                        }
+                      >
+                        {accountActive ? "Desativar" : "Ativar"}
+                      </ActionButton>
+                      <ActionButton
+                        disabled={action?.state === "pending"}
+                        onClick={() => void openDetails(user)}
+                      >
+                        Detalhes
+                      </ActionButton>
+                    </div>
+                    {action ? (
+                      <p
+                        className={`mt-2 max-w-[300px] font-mono text-[9px] ${action.state === "error" ? "text-rose-400" : action.state === "success" ? "text-emerald-400" : "text-primary"}`}
+                      >
+                        {action.state === "pending"
+                          ? "Processando…"
+                          : action.message}
+                      </p>
                     ) : null}
-                    {pageSource === "2avendas" ? (
-                      <>
-                        <select
-                          className="h-7 rounded border border-border bg-card px-2 font-mono text-[10px]"
-                          value={roleDraftByUser[u.id] ?? u.role}
-                          title={(rolePermissionsBySlug.get(roleDraftByUser[u.id] ?? u.role) ?? []).join(", ")}
-                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                          onChange={(e) =>
-                            setRoleDraftByUser((prev) => ({
-                              ...prev,
-                              [u.id]: e.target.value,
-                            }))
-                          }
-                        >
-                          {(roles.length
-                            ? roles
-                            : [{ value: u.role, label: u.role }]
-                          ).map((r) => (
-                            <option
-                              key={r.value}
-                              value={r.value}
-                              title={[r.description ?? "", ...(r.permissions ?? [])].filter(Boolean).join(" | ")}
-                            >
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
-                          onClick={() => makeAdmin(u)}
-                          disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                        >
-                          {busyActionByUser[u.id] === "role" ? "salvando..." : "salvar role"}
-                        </button>
-                      </>
-                    ) : null}
-                    <button
-                      className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
-                      onClick={() => toggleActive(u)}
-                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                    >
-                      {busyActionByUser[u.id] === "status"
-                        ? "salvando..."
-                        : u.active
-                          ? "desativar"
-                          : "ativar"}
-                    </button>
-                    <button
-                      className="rounded border border-border px-2 py-1 font-mono text-[10px] hover:bg-card"
-                      onClick={() => viewAssets(u)}
-                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                    >
-                      {busyActionByUser[u.id] === "assets" ? "carregando..." : "assets"}
-                    </button>
-                    <button
-                      className="rounded border border-chart-3/60 px-2 py-1 font-mono text-[10px] text-chart-3 hover:bg-chart-3/10"
-                      onClick={() => permanentlyDeleteAccount(u)}
-                      disabled={Boolean(busyActionByUser[u.id]) || sourceSwitching}
-                    >
-                      {busyActionByUser[u.id] === "delete" ? "apagando..." : "apagar conta"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!pageData.items.length ? (
+                  </td>
+                </tr>
+              );
+            })}
+            {!loading && page.items.length === 0 ? (
               <tr>
                 <td
-                  colSpan={pageSource === "wagoo" ? wagooTableColSpan : avendasTableColSpan}
-                  className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
+                  colSpan={7}
+                  className="p-10 text-center font-mono text-xs text-muted-foreground"
                 >
-                  Sem usuários para o filtro atual.
+                  Nenhum usuário para os filtros atuais.
+                </td>
+              </tr>
+            ) : null}
+            {loading && page.items.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="p-10 text-center font-mono text-xs text-primary"
+                >
+                  Carregando visão unificada…
                 </td>
               </tr>
             ) : null}
@@ -706,48 +417,286 @@ function AdminPage() {
         </table>
       </section>
 
-      <section className="flex items-center justify-between">
-        <div className="font-mono text-xs text-muted-foreground">
-          Página {pageData.page} / {totalPages} — total {pageData.total}
-        </div>
+      <footer className="flex items-center justify-between font-mono text-xs text-muted-foreground">
+        <span>
+          Página {page.page} de {totalPages} · {page.total} usuários
+        </span>
         <div className="flex gap-2">
-          <button
-            className="rounded border px-3 py-1 font-mono text-xs"
-            disabled={pageData.page <= 1 || loading}
-            onClick={() => load(pageData.page - 1)}
+          <Button
+            variant="outline"
+            className="rounded-none"
+            disabled={loading || page.page <= 1}
+            onClick={() => void load(page.page - 1)}
           >
-            anterior
-          </button>
-          <button
-            className="rounded border px-3 py-1 font-mono text-xs"
-            disabled={pageData.page >= totalPages || loading}
-            onClick={() => load(pageData.page + 1)}
+            Anterior
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-none"
+            disabled={loading || page.page >= totalPages}
+            onClick={() => void load(page.page + 1)}
           >
-            próxima
-          </button>
+            Próxima
+          </Button>
         </div>
-      </section>
+      </footer>
 
-      {assets ? (
-        <section className="rounded border border-border p-3">
-          <h2 className="mb-2 font-mono text-xs uppercase tracking-wider">Assets do usuário</h2>
-          {!assets.length ? (
-            <p className="font-mono text-xs text-muted-foreground">Nenhum asset encontrado.</p>
-          ) : (
-            <ul className="space-y-2">
-              {assets.map((a) => (
-                <li key={a.id} className="rounded border border-border/60 p-2 font-mono text-xs">
-                  <div>ID: {a.id}</div>
-                  <div>Nome: {a.name ?? "—"}</div>
-                  <div>Bucket: {a.bucket ?? "—"}</div>
-                  <div>Path: {a.path ?? "—"}</div>
-                  <div>URL: {a.url ?? "—"}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      {selected || detailsLoading ? (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/60"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-border bg-background p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-primary">
+                  Detalhes centrais
+                </p>
+                <h2 className="mt-1 text-lg font-semibold">
+                  {selected?.user.name ?? "Carregando…"}
+                </h2>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {selected?.user.email}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelected(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {detailsLoading && !selected ? (
+              <p className="font-mono text-xs text-primary">
+                Carregando detalhes…
+              </p>
+            ) : null}
+            {selected ? (
+              <UserDetails
+                details={selected}
+                onCommand={(value, slug, params) =>
+                  command(selected.user, value, slug, params)
+                }
+              />
+            ) : null}
+          </aside>
+        </div>
       ) : null}
     </div>
+  );
+}
+
+function Filter({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <select
+        className="h-9 w-full border border-border bg-background px-2 font-mono text-xs"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Todos</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ActionButton({
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center border border-border px-2 py-1 font-mono text-[9px] uppercase hover:border-primary hover:text-primary disabled:opacity-40"
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function UserDetails({
+  details,
+  onCommand,
+}: {
+  details: UnifiedUserDetails;
+  onCommand: (
+    command: Command,
+    product: string,
+    params?: Record<string, unknown>,
+  ) => void;
+}) {
+  const product = details.user.products[0];
+  return (
+    <div className="space-y-6">
+      <section>
+        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Contas por produto
+        </h3>
+        <div className="space-y-2">
+          {details.user.product_accounts.length ? (
+            details.user.product_accounts.map((account) => (
+              <div key={account.id} className="border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <strong className="font-mono text-xs">
+                    {account.product_slug ?? account.product_id ?? "Produto"}
+                  </strong>
+                  <Badge
+                    variant="outline"
+                    className={`rounded-none ${statusTone(account.status)}`}
+                  >
+                    {account.status ?? "—"}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[10px] text-muted-foreground">
+                  <span>Plano: {account.plan ?? "—"}</span>
+                  <span>Login: {formatDate(account.last_login_at)}</span>
+                  <span className="col-span-2">
+                    Sync: {formatDate(account.last_synced_at)}
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <Empty />
+          )}
+        </div>
+      </section>
+      <section>
+        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Comandos
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          <ActionButton
+            disabled={!product}
+            onClick={() => {
+              const role = window.prompt("Nova role:");
+              if (product && role?.trim())
+                onCommand("role.set", product, { role: role.trim() });
+            }}
+          >
+            Alterar role
+          </ActionButton>
+          <ActionButton
+            disabled={!product}
+            onClick={() => {
+              const plan = window.prompt("Novo plano:");
+              if (product && plan?.trim())
+                onCommand("plan.set", product, { plan: plan.trim() });
+            }}
+          >
+            Alterar plano
+          </ActionButton>
+          <ActionButton
+            disabled={!product}
+            onClick={() => {
+              if (
+                product &&
+                window.confirm(
+                  `Excluir definitivamente a conta ${product} deste usuário?`,
+                )
+              )
+                onCommand("user.delete", product);
+            }}
+          >
+            Excluir conta
+          </ActionButton>
+        </div>
+      </section>
+      <Timeline
+        title="Eventos"
+        items={details.activity.map((item) => ({
+          id: item.id,
+          title: item.event_type ?? "evento",
+          detail: item.event_id,
+          at: item.occurred_at,
+        }))}
+      />
+      <Timeline
+        title="Pagamentos"
+        items={details.payments.map((item) => ({
+          id: item.id,
+          title: `${item.event_type ?? "pagamento"} · ${item.status ?? "—"}`,
+          detail:
+            item.amount == null
+              ? null
+              : `${(item.currency ?? "BRL").toUpperCase()} ${(item.amount / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          at: item.created_at,
+        }))}
+      />
+      <Timeline
+        title="Auditoria"
+        items={details.audit.map((item) => ({
+          id: item.id,
+          title: item.action ?? "ação",
+          detail: item.target_type,
+          at: item.created_at,
+        }))}
+      />
+    </div>
+  );
+}
+
+function Timeline({
+  title,
+  items,
+}: {
+  title: string;
+  items: { id: string; title: string; detail: string | null; at: string }[];
+}) {
+  return (
+    <section>
+      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        {title}
+      </h3>
+      {items.length ? (
+        <div className="space-y-1">
+          {items.map((item) => (
+            <div key={item.id} className="border-l border-primary/50 py-2 pl-3">
+              <p className="text-xs font-medium">{item.title}</p>
+              {item.detail ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {item.detail}
+                </p>
+              ) : null}
+              <time className="font-mono text-[9px] text-muted-foreground">
+                {formatDate(item.at)}
+              </time>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty />
+      )}
+    </section>
+  );
+}
+
+function Empty() {
+  return (
+    <p className="border border-dashed border-border p-3 font-mono text-[10px] text-muted-foreground">
+      Sem registros.
+    </p>
   );
 }

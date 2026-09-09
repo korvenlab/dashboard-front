@@ -12,7 +12,7 @@ export const dashboardServerFnAuthMiddleware = createMiddleware().server(
 
     const auth = await import("@/lib/dashboard-auth.server");
     if (!auth.isDashboardAuthConfigured()) {
-      return next();
+      throw new Error("Autenticação do dashboard não configurada.");
     }
 
     if (!auth.isDashboardRequestAuthenticated(request)) {

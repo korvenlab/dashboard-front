@@ -17,6 +17,7 @@ import {
 import { useRouter, useRouterState, useSearch } from "@tanstack/react-router";
 import { useKorvenDashboard } from "@/lib/dashboard-context";
 import type { RootSearch } from "@/lib/root-search";
+import { NotificationCenter } from "@/components/notification-center";
 
 const PERIODS = [
   { label: "Últimas 24h", days: 1 },
@@ -25,45 +26,30 @@ const PERIODS = [
   { label: "Trimestre", days: 90 },
 ];
 
-/** UUIDs de exemplo — substitua pelos IDs reais da sua conta ou carregue da API de organizações. */
-const ORGS = [
-  { value: "__all__", label: "Todas as organizações" },
-  {
-    value: "00000000-0000-4000-8000-000000000001",
-    label: "Korven Lab (UUID demo)",
-  },
-  {
-    value: "00000000-0000-4000-8000-000000000002",
-    label: "Wagoo (UUID demo)",
-  },
-  {
-    value: "00000000-0000-4000-8000-000000000003",
-    label: "2AVendas (UUID demo)",
-  },
+const PRODUCTS = [
+  { value: "__all__", label: "Todos os produtos" },
+  { value: "wagoo", label: "Wagoo" },
+  { value: "2avendas", label: "2AVendas" },
 ];
 
 export function DashboardTopbar() {
   const search = useSearch({ from: "__root__" }) as RootSearch;
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { dashboard, loading, refresh, loadedOnce, error } = useKorvenDashboard();
+  const { dashboard, loading, refresh, loadedOnce, error } =
+    useKorvenDashboard();
 
-  const organization_id = search.organization_id;
+  const productSlug = search.product_slug;
   const period_days = search.period_days ?? 30;
 
-  let orgChoices = [...ORGS];
-  if (organization_id && !orgChoices.some((o) => o.value === organization_id)) {
-    orgChoices = [
-      ORGS[0],
-      { value: organization_id, label: `Organização ${organization_id.slice(0, 8)}…` },
-      ...ORGS.slice(1),
-    ];
-  }
-
-  const orgSelectValue = organization_id ?? "__all__";
+  const productChoices =
+    productSlug && !PRODUCTS.some((item) => item.value === productSlug)
+      ? [...PRODUCTS, { value: productSlug, label: productSlug }]
+      : PRODUCTS;
 
   const periodLabel =
-    PERIODS.find((p) => p.days === period_days)?.label ?? `Últimos ${period_days} dias`;
+    PERIODS.find((p) => p.days === period_days)?.label ??
+    `Últimos ${period_days} dias`;
 
   const remoteTitle = dashboard?.ui.topbar?.title ?? "";
   const remoteSubtitle = dashboard?.ui.topbar?.subtitle ?? "";
@@ -74,24 +60,28 @@ export function DashboardTopbar() {
       <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
       <div className="ml-1 hidden h-5 w-px bg-border md:block" />
       <Select
-        value={orgSelectValue}
+        value={productSlug ?? "__all__"}
         onValueChange={(v) => {
           router.navigate({
             to: path as "/" | "/wagoo" | "/avendas" | "/admin",
             search: (prev): RootSearch => ({
               ...(prev as RootSearch),
-              organization_id: v === "__all__" ? undefined : v,
+              product_slug: v === "__all__" ? undefined : v,
             }),
             replace: true,
           });
         }}
       >
         <SelectTrigger className="h-8 min-w-[200px] rounded-none border-border bg-card font-mono text-xs uppercase tracking-wider">
-          <SelectValue placeholder="Organização" />
+          <SelectValue placeholder="Produto" />
         </SelectTrigger>
         <SelectContent className="rounded-none">
-          {orgChoices.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="font-mono text-xs">
+          {productChoices.map((o) => (
+            <SelectItem
+              key={o.value}
+              value={o.value}
+              className="font-mono text-xs"
+            >
               {o.label}
             </SelectItem>
           ))}
@@ -147,30 +137,39 @@ export function DashboardTopbar() {
       )}
 
       <div className="ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+        <NotificationCenter />
         {error ? (
-          <span className="max-w-xs truncate text-rose-400 normal-case" title={error}>
+          <span
+            className="max-w-xs truncate text-rose-400 normal-case"
+            title={error}
+          >
             {error}
           </span>
         ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
-        title="Busca métricas na Stripe (Wagoo + 2AVENDAS)"
-        disabled={loading}
-        onClick={() => {
-          void refresh();
-        }}
-      >
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
+          title="Busca métricas na RPC central; Stripe é fallback legado"
+          disabled={loading}
+          onClick={() => {
+            void refresh();
+          }}
+        >
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           {loading ? "Carregando…" : "Atualizar"}
         </Button>
         {generatedAt && loadedOnce ? (
-          <span className="hidden lg:inline" title="gerado_em (Stripe)">
-            stripe {generatedAt}
+          <span
+            className="hidden lg:inline"
+            title={`Fonte: ${dashboard?.meta.source}`}
+          >
+            {dashboard?.meta.source} {generatedAt}
           </span>
         ) : (
-          <span className="hidden md:inline text-muted-foreground/80">sem dados</span>
+          <span className="hidden md:inline text-muted-foreground/80">
+            sem dados
+          </span>
         )}
       </div>
     </header>
