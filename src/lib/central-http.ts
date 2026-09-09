@@ -137,3 +137,21 @@ export async function fetchSupabasePublicConfigHttp() {
     "/api/dashboard/central/public-config",
   );
 }
+
+export async function reconcileCentralHttp(input?: {
+  product?: "wagoo" | "2avendas";
+}) {
+  return centralFetch<{
+    ok: true;
+    results: {
+      product: string;
+      seen: number;
+      upserted: number;
+      errors: string[];
+    }[];
+    unifiedUsers: number;
+  }>("/api/dashboard/central/reconcile", {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
+  });
+}

@@ -1,8 +1,3 @@
-import { z } from "zod";
-import {
-  isDashboardAuthConfigured,
-  isDashboardRequestAuthenticated,
-} from "@/lib/dashboard-auth.server";
 import {
   createCentralAccessLinkService,
   getCentralHealth,
@@ -13,6 +8,12 @@ import {
   mutateNotificationService,
   runCentralAdminCommand,
 } from "@/lib/central-service";
+import { reconcileCentralProducts } from "@/lib/central-reconcile";
+import { z } from "zod";
+import {
+  isDashboardAuthConfigured,
+  isDashboardRequestAuthenticated,
+} from "@/lib/dashboard-auth.server";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -158,6 +159,23 @@ export async function handleDashboardCentralApi(
       const body = notificationMutationSchema.safeParse(await request.json());
       if (!body.success) return jsonError("Payload inválido.", 400);
       return jsonOk(await mutateNotificationService(body.data));
+    }
+
+    if (
+      pathname === "/api/dashboard/central/reconcile" &&
+      request.method === "POST"
+    ) {
+      const raw = await request.json().catch(() => ({}));
+      const body = z
+        .object({
+          product: z.enum(["wagoo", "2avendas"]).optional(),
+        })
+        .safeParse(raw);
+      if (!body.success) return jsonError("Payload inválido.", 400);
+      const products = body.data.product
+        ? ([body.data.product] as ("wagoo" | "2avendas")[])
+        : (["wagoo", "2avendas"] as ("wagoo" | "2avendas")[]);
+      return jsonOk(await reconcileCentralProducts(products));
     }
 
     return jsonError("Rota central não encontrada.", 404);

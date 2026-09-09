@@ -164,7 +164,10 @@ export function DashboardTopbar() {
             className="hidden lg:inline"
             title={`Fonte: ${dashboard?.meta.source}`}
           >
-            {dashboard?.meta.source} {generatedAt}
+            {dashboard?.meta.source === "supabase"
+              ? "central"
+              : dashboard?.meta.source}{" "}
+            {generatedAt}
           </span>
         ) : (
           <span className="hidden md:inline text-muted-foreground/80">

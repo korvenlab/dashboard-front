@@ -7,6 +7,7 @@ import {
   fetchCentralHealth,
   fetchUnifiedUserDetailsHttp,
   fetchUnifiedUsersHttp,
+  reconcileCentralHttp,
 } from "@/lib/central-http";
 import type {
   UnifiedUser,
@@ -57,6 +58,8 @@ function AdminPage() {
     {},
   );
   const [healthLabel, setHealthLabel] = useState("checando…");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const load = useCallback(
     async (targetPage = 1) => {
@@ -105,6 +108,36 @@ function AdminPage() {
         );
       });
   }, []);
+
+  async function syncProducts() {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await reconcileCentralHttp();
+      setSyncMessage(
+        result.results
+          .map(
+            (item) =>
+              `${item.product}: ${item.upserted}/${item.seen}` +
+              (item.errors[0] ? ` · ${item.errors[0]}` : ""),
+          )
+          .join(" · ") + ` · total ${result.unifiedUsers}`,
+      );
+      await load(1);
+    } catch (cause) {
+      setSyncMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!loading && page.total === 0 && !syncing && !syncMessage) {
+      void syncProducts();
+    }
+    // Auto-sync only once when the central store is empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, page.total]);
 
   async function openDetails(user: UnifiedUser) {
     setDetailsLoading(true);
@@ -218,18 +251,37 @@ function AdminPage() {
             Fonte ativa: {healthLabel}
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="rounded-none font-mono text-xs"
-          disabled={loading}
-          onClick={() => void load(page.page)}
-        >
-          <RefreshCw
-            className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-          />
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="rounded-none font-mono text-xs"
+            disabled={syncing || loading}
+            onClick={() => void syncProducts()}
+          >
+            <RefreshCw
+              className={`mr-2 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`}
+            />
+            Sincronizar
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-none font-mono text-xs"
+            disabled={loading}
+            onClick={() => void load(page.page)}
+          >
+            <RefreshCw
+              className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+            Atualizar
+          </Button>
+        </div>
       </header>
+
+      {syncMessage ? (
+        <div className="border border-border bg-card/40 p-3 font-mono text-[11px] text-muted-foreground">
+          {syncMessage}
+        </div>
+      ) : null}
 
       <form
         className="grid gap-3 border border-border bg-card/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_180px_auto]"

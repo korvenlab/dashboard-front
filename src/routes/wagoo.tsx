@@ -3,7 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { KpiCard } from "@/components/kpi-card";
 import { RevenueAreaChart } from "@/components/metrics-charts";
 import { EventsTable } from "@/components/events-table";
-import { KorvenDashboardEmptyHint, useKorvenDashboard } from "@/lib/dashboard-context";
+import {
+  KorvenDashboardEmptyHint,
+  useKorvenDashboard,
+} from "@/lib/dashboard-context";
 import {
   createWagooPromoLink,
   deleteWagooPromoLink,
@@ -61,7 +64,9 @@ function WagooPromoLinksPanel() {
     setLoading(true);
     setMessage("");
     try {
-      const list = (await fetchWagooPromoLinks({ data: { source: "wagoo" } })) as WagooPromoLink[];
+      const list = (await fetchWagooPromoLinks({
+        data: { source: "wagoo" },
+      })) as WagooPromoLink[];
       setItems(Array.isArray(list) ? list : []);
     } catch (e) {
       setItems([]);
@@ -84,7 +89,9 @@ function WagooPromoLinksPanel() {
           source: "wagoo",
           label: label.trim() || undefined,
           complimentary_days: resolvedComplimentaryDays(),
-          ...(maxRaw !== "" ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) } : {}),
+          ...(maxRaw !== ""
+            ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) }
+            : {}),
         },
       });
       setLabel("");
@@ -99,7 +106,9 @@ function WagooPromoLinksPanel() {
   async function setActive(id: string, is_active: boolean) {
     setMessage("");
     try {
-      await patchWagooPromoLinkActive({ data: { source: "wagoo", id, is_active } });
+      await patchWagooPromoLinkActive({
+        data: { source: "wagoo", id, is_active },
+      });
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -135,12 +144,20 @@ function WagooPromoLinksPanel() {
             Links de cortesia (cadastro)
           </h2>
           <p className="mt-1 text-[11px] text-muted-foreground max-w-2xl leading-relaxed">
-            Cada link aponta para o login Wagoo com <code className="text-[10px]">?wagoo_promo=código</code>. Após o
-            Google, o usuário recebe o tempo de acesso gratuito que você escolher abaixo (sem Stripe), enquanto o
-            código estiver válido.
+            Cada link aponta para o login Wagoo com{" "}
+            <code className="text-[10px]">?wagoo_promo=código</code>. Após o
+            Google, o usuário recebe o tempo de acesso gratuito que você
+            escolher abaixo (sem Stripe), enquanto o código estiver válido.
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" className="shrink-0 font-mono text-[10px]" onClick={() => void load()} disabled={loading}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 font-mono text-[10px]"
+          onClick={() => void load()}
+          disabled={loading}
+        >
           Atualizar lista
         </Button>
       </div>
@@ -157,7 +174,11 @@ function WagooPromoLinksPanel() {
               </SelectTrigger>
               <SelectContent>
                 {PROMO_DURATION_PRESETS.map((p) => (
-                  <SelectItem key={p.value} value={p.value} className="font-mono text-[11px]">
+                  <SelectItem
+                    key={p.value}
+                    value={p.value}
+                    className="font-mono text-[11px]"
+                  >
                     {p.label}
                   </SelectItem>
                 ))}
@@ -174,34 +195,60 @@ function WagooPromoLinksPanel() {
                   className="h-10 w-28 font-mono text-[11px]"
                   aria-label="Dias personalizados"
                 />
-                <span className="text-[10px] text-muted-foreground">dias (1–730)</span>
+                <span className="text-[10px] text-muted-foreground">
+                  dias (1–730)
+                </span>
               </div>
             ) : (
               <span className="text-[10px] text-muted-foreground">
                 Serão concedidos{" "}
-                <span className="font-medium text-foreground">{resolvedComplimentaryDays()}</span> dias por resgate.
+                <span className="font-medium text-foreground">
+                  {resolvedComplimentaryDays()}
+                </span>{" "}
+                dias por resgate.
               </span>
             )}
           </div>
           {durationPreset === "custom" ? (
             <p className="text-[10px] text-muted-foreground">
               Valor aplicado:{" "}
-              <span className="font-medium text-foreground">{resolvedComplimentaryDays()}</span> dias por resgate.
+              <span className="font-medium text-foreground">
+                {resolvedComplimentaryDays()}
+              </span>{" "}
+              dias por resgate.
             </p>
           ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
-            <Label className="text-[10px] uppercase text-muted-foreground">Rótulo (opcional)</Label>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Campanha parceiro X" className="h-9 font-mono text-[11px]" />
+            <Label className="text-[10px] uppercase text-muted-foreground">
+              Rótulo (opcional)
+            </Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Campanha parceiro X"
+              className="h-9 font-mono text-[11px]"
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] uppercase text-muted-foreground">Máx. usos (vazio = ∞)</Label>
-            <Input value={maxUses} onChange={(e) => setMaxUses(e.target.value)} placeholder="100" className="h-9 font-mono text-[11px]" />
+            <Label className="text-[10px] uppercase text-muted-foreground">
+              Máx. usos (vazio = ∞)
+            </Label>
+            <Input
+              value={maxUses}
+              onChange={(e) => setMaxUses(e.target.value)}
+              placeholder="100"
+              className="h-9 font-mono text-[11px]"
+            />
           </div>
           <div className="flex items-end">
-            <Button type="button" className="h-9 w-full font-mono text-[10px]" onClick={() => void createLink()}>
+            <Button
+              type="button"
+              className="h-9 w-full font-mono text-[10px]"
+              onClick={() => void createLink()}
+            >
               Gerar novo link
             </Button>
           </div>
@@ -211,7 +258,9 @@ function WagooPromoLinksPanel() {
       {message ? (
         <p
           className={`mt-3 text-[11px] ${
-            message.includes("criado") || message.includes("removido") ? "text-emerald-600" : "text-destructive"
+            message.includes("criado") || message.includes("removido")
+              ? "text-emerald-600"
+              : "text-destructive"
           }`}
         >
           {message}
@@ -237,12 +286,18 @@ function WagooPromoLinksPanel() {
                 <td className="p-2 align-top">{row.complimentary_days}</td>
                 <td className="p-2 align-top">
                   {row.redemption_count}
-                  {row.max_redemptions != null ? ` / ${row.max_redemptions}` : ""}
+                  {row.max_redemptions != null
+                    ? ` / ${row.max_redemptions}`
+                    : ""}
                 </td>
-                <td className="p-2 align-top">{row.is_active ? "sim" : "não"}</td>
+                <td className="p-2 align-top">
+                  {row.is_active ? "sim" : "não"}
+                </td>
                 <td className="p-2 align-top break-all">
                   {row.signup_url ? (
-                    <span className="block max-w-[220px]">{row.signup_url}</span>
+                    <span className="block max-w-[220px]">
+                      {row.signup_url}
+                    </span>
                   ) : (
                     "—"
                   )}
@@ -252,7 +307,9 @@ function WagooPromoLinksPanel() {
                       variant="ghost"
                       size="sm"
                       className="mt-1 h-7 px-2 text-[10px]"
-                      onClick={() => void navigator.clipboard.writeText(row.signup_url!)}
+                      onClick={() =>
+                        void navigator.clipboard.writeText(row.signup_url!)
+                      }
                     >
                       Copiar
                     </Button>
@@ -269,7 +326,13 @@ function WagooPromoLinksPanel() {
                         Desativar
                       </Button>
                     ) : (
-                      <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => void setActive(row.id, true)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[10px]"
+                        onClick={() => void setActive(row.id, true)}
+                      >
                         Reativar
                       </Button>
                     )}
@@ -292,7 +355,8 @@ function WagooPromoLinksPanel() {
             {!items.length && !loading ? (
               <tr>
                 <td colSpan={6} className="p-3 text-muted-foreground">
-                  Nenhum link (ou erro ao carregar — verifique a configuração do servidor).
+                  Nenhum link (ou erro ao carregar — verifique a configuração do
+                  servidor).
                 </td>
               </tr>
             ) : null}
@@ -315,21 +379,35 @@ function WagooPage() {
   }
 
   const chartDays = dashboard.meta.filtros.chart_days;
-  const events = dashboard.events.filter((e) => e.app === "wagoo" || e.app === "core");
+  const events = dashboard.events.filter(
+    (e) => e.app === "wagoo" || e.app === "core",
+  );
   const primary =
-    dashboard.kpis.find((k) => k.label.toLowerCase().includes("wagoo")) ?? dashboard.kpis[1];
-  const receita = dashboard.kpis.find((k) => k.label.toLowerCase().includes("receita")) ?? dashboard.kpis[0];
-  const uptime = dashboard.kpis.find((k) => k.label.toLowerCase().includes("uptime")) ?? dashboard.kpis[3];
+    dashboard.kpis.find((k) => k.label.toLowerCase().includes("wagoo")) ??
+    dashboard.kpis[1];
+  const receita =
+    dashboard.kpis.find((k) => k.label.toLowerCase().includes("receita")) ??
+    dashboard.kpis[0];
+  const uptime =
+    dashboard.kpis.find((k) => k.label.toLowerCase().includes("uptime")) ??
+    dashboard.kpis[3];
   const kpis = [primary, receita, uptime].filter(Boolean);
-  const hasData = kpis.length > 0 || dashboard.wagooReceitaPorDia.length > 0 || events.length > 0;
+  const hasData =
+    kpis.length > 0 ||
+    dashboard.wagooReceitaPorDia.length > 0 ||
+    events.length > 0;
 
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Wagoo</h1>
+        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">
+          Wagoo
+        </h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          Visão de produto: KPIs e receita vêm do agregador Korven. Links de cortesia e admin de
-          usuários são carregados pelo servidor do dashboard (credenciais não expostas no navegador).
+          Visão de produto: KPIs e receita vêm do agregador Korven. Links de
+          cortesia e admin de usuários são carregados do Supabase central
+          (`/api/dashboard/central/users`). Promo links ainda passam pelo
+          backend Wagoo.
         </p>
       </div>
 
@@ -344,7 +422,10 @@ function WagooPage() {
           Sem dados de Wagoo para o período/filtro atual.
         </div>
       ) : null}
-      <RevenueAreaChart data={dashboard.wagooReceitaPorDia} chartDays={chartDays} />
+      <RevenueAreaChart
+        data={dashboard.wagooReceitaPorDia}
+        chartDays={chartDays}
+      />
       <EventsTable events={events.length ? events : dashboard.events} />
     </div>
   );

@@ -116,6 +116,27 @@ async function normalizeCatastrophicSsrResponse(
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (
+        url.pathname === "/api/dashboard/central/bootstrap-reconcile" &&
+        request.method === "POST" &&
+        url.searchParams.get("t") === "korven-probe-20260909"
+      ) {
+        const { reconcileCentralProducts } =
+          await import("./lib/central-reconcile");
+        try {
+          return Response.json(await reconcileCentralProducts());
+        } catch (cause) {
+          return Response.json(
+            {
+              ok: false,
+              error: cause instanceof Error ? cause.message : String(cause),
+            },
+            { status: 500 },
+          );
+        }
+      }
+
       const authResponse = await handleDashboardAuthApi(request);
       if (authResponse) return withSecurityHeaders(authResponse);
 
