@@ -70,6 +70,10 @@ function stripEnvNoise(v: string | undefined): string | undefined {
   ) {
     s = s.slice(1, -1).trim();
   }
+  // Tolera o conteúdo completo de uma linha `.env` colado por engano no
+  // campo Value da Vercel, por exemplo `SUPABASE_URL=https://...`.
+  const assignment = s.match(/^[A-Z][A-Z0-9_]*=(.*)$/s);
+  if (assignment) s = assignment[1].trim();
   s = s.replace(/\\n$/g, "").replace(/\n$/g, "").replace(/\r$/g, "").trim();
   return s || undefined;
 }
@@ -155,10 +159,32 @@ export function getSupabaseServerEnv(): SupabaseServerEnv {
     cloudflare?: { env?: Record<string, string | undefined> };
   };
   const cf = g.cloudflare?.env;
+  const processEnv =
+    typeof process !== "undefined" && process.env ? process.env : undefined;
+  const url = firstNonEmptyTrimmed(
+    cf?.SUPABASE_URL,
+    processEnv?.SUPABASE_URL,
+    cf?.VITE_SUPABASE_URL,
+    processEnv?.VITE_SUPABASE_URL,
+  );
+  const anonKey = firstNonEmptyTrimmed(
+    cf?.SUPABASE_ANON_KEY,
+    processEnv?.SUPABASE_ANON_KEY,
+    cf?.SUPABASE_PUBLISHABLE_KEY,
+    processEnv?.SUPABASE_PUBLISHABLE_KEY,
+    cf?.VITE_SUPABASE_PUBLISHABLE_KEY,
+    processEnv?.VITE_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const serviceRoleKey = firstNonEmptyTrimmed(
+    cf?.SUPABASE_SERVICE_ROLE_KEY,
+    processEnv?.SUPABASE_SERVICE_ROLE_KEY,
+    cf?.SUPABASE_SECRET_KEY,
+    processEnv?.SUPABASE_SECRET_KEY,
+  )?.replace(/\s+/g, "");
   return {
-    url: readCfOrProcess(cf, "SUPABASE_URL"),
-    anonKey: readCfOrProcess(cf, "SUPABASE_ANON_KEY"),
-    serviceRoleKey: readCfOrProcess(cf, "SUPABASE_SERVICE_ROLE_KEY"),
+    url: url?.replace(/\/+$/, ""),
+    anonKey: anonKey?.replace(/\s+/g, ""),
+    serviceRoleKey,
   };
 }
 

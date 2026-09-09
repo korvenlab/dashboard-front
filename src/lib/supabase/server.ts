@@ -16,6 +16,25 @@ export function getSupabaseServerClient(
         : "Supabase central não configurado: defina SUPABASE_URL e SUPABASE_ANON_KEY no servidor.",
     );
   }
+  if (!/^https:\/\/[a-z0-9]+\.supabase\.co$/i.test(env.url)) {
+    throw new Error(
+      "SUPABASE_URL inválida: use somente https://PROJECT_REF.supabase.co.",
+    );
+  }
+  if (options.admin && !key.startsWith("eyJ")) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY inválida: use a chave JWT legada service_role, iniciada por eyJ.",
+    );
+  }
+  if (
+    !options.admin &&
+    !key.startsWith("eyJ") &&
+    !key.startsWith("sb_publishable_")
+  ) {
+    throw new Error(
+      "SUPABASE_ANON_KEY inválida: use anon legada (eyJ...) ou publishable (sb_publishable_...).",
+    );
+  }
 
   const existing = options.admin ? adminClient : anonClient;
   if (existing) return existing;
