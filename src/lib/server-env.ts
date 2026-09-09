@@ -178,8 +178,6 @@ export function getSupabaseServerEnv(): SupabaseServerEnv {
   const serviceRoleKey = firstNonEmptyTrimmed(
     cf?.SUPABASE_SERVICE_ROLE_KEY,
     processEnv?.SUPABASE_SERVICE_ROLE_KEY,
-    cf?.SUPABASE_SECRET_KEY,
-    processEnv?.SUPABASE_SECRET_KEY,
   )?.replace(/\s+/g, "");
   return {
     url: url?.replace(/\/+$/, ""),
