@@ -86,6 +86,7 @@ export function getWagooServerEnv(): WagooServerEnv {
       envGet("WAGOO_METRICS_API_KEY"),
       envGet("METRICS_API_KEY"),
       envGet("ADMIN_API_SECRET"),
+      envGet("WAGOO_API_SECRET"),
       envGet("DASHBOARD_BACKEND_API_KEY"),
     ),
   };

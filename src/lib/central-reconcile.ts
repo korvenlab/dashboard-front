@@ -27,20 +27,29 @@ function resolveBase(source: ReconcileProduct): {
   if (source === "wagoo") {
     const env = getWagooServerEnv();
     let base = env.apiBaseUrl?.replace(/\/+$/, "") ?? "";
-    const key = env.metricsApiKey?.trim() ?? "";
+    // Prefer the metrics/admin key; WAGOO_API_SECRET is the control-plane command key.
+    const key =
+      env.metricsApiKey?.trim() ||
+      (typeof process !== "undefined"
+        ? (process.env.WAGOO_API_SECRET || "").trim()
+        : "");
     if (base.toLowerCase().endsWith("/api/admin")) {
       base = base.slice(0, -"/api/admin".length).replace(/\/+$/, "");
     }
     if (!base || !key) {
       throw new Error(
-        "Wagoo: defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY na Vercel.",
+        "Wagoo: defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou WAGOO_API_SECRET) na Vercel.",
       );
     }
     return { baseUrl: base, apiKey: key };
   }
   const env = getTwoAvendasServerEnv();
   const base = env.apiBaseUrl?.replace(/\/+$/, "") ?? "";
-  const key = env.metricsApiKey?.trim() ?? "";
+  const key =
+    env.metricsApiKey?.trim() ||
+    (typeof process !== "undefined"
+      ? (process.env.TWO_AVENDAS_API_SECRET || "").trim()
+      : "");
   if (!base || !key) {
     throw new Error(
       "2AVendas: defina TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY na Vercel.",
@@ -76,7 +85,7 @@ async function fetchSyncPage(
   }
   if (!res.ok) {
     throw new Error(
-      `${source}: sync HTTP ${res.status} · ${text.slice(0, 180)}`,
+      `${source}: sync HTTP ${res.status} em ${baseUrl} · ${text.slice(0, 180)}`,
     );
   }
   const root = asRecord(json) ?? {};
