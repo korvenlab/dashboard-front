@@ -1,4 +1,12 @@
-import type { AdminRolesResult, AdminSource, AdminUsersPage } from "@/lib/admin-api";
+import type {
+  AdminRolesResult,
+  AdminSource,
+  AdminUsersPage,
+  TwoAvendasPromoLink,
+  WagooPromoLink,
+} from "@/lib/admin-api";
+
+export type { WagooPromoLink, TwoAvendasPromoLink };
 
 async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -7,10 +15,39 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 function parseError(json: unknown, fallback: string): string {
-  if (json && typeof json === "object" && "error" in json && typeof (json as { error: unknown }).error === "string") {
+  if (
+    json &&
+    typeof json === "object" &&
+    "error" in json &&
+    typeof (json as { error: unknown }).error === "string"
+  ) {
     return (json as { error: string }).error;
   }
   return fallback;
+}
+
+async function adminFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(path, {
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  });
+  const json = await readJson<T & { error?: string }>(res);
+  if (res.status === 401) {
+    throw new Error("Sessão expirada. Faça login novamente.");
+  }
+  if (!res.ok) {
+    throw new Error(parseError(json, `Falha na API admin (${res.status}).`));
+  }
+  return json as T;
 }
 
 export async function fetchAdminUsersHttp(params: {
@@ -24,38 +61,90 @@ export async function fetchAdminUsersHttp(params: {
   if (params.search?.trim()) q.set("search", params.search.trim());
   q.set("page", String(params.page ?? 1));
   q.set("limit", String(params.limit ?? 20));
-
-  const res = await fetch(`/api/dashboard/admin/users?${q.toString()}`, {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-    headers: { accept: "application/json" },
-  });
-
-  const json = await readJson<AdminUsersPage & { error?: string }>(res);
-  if (res.status === 401) {
-    throw new Error("Sessão expirada. Faça login novamente.");
-  }
-  if (!res.ok) {
-    throw new Error(parseError(json, `Falha ao carregar usuários (${res.status}).`));
-  }
-  return json as AdminUsersPage;
+  return adminFetch(`/api/dashboard/admin/users?${q.toString()}`);
 }
 
-export async function fetchAdminRolesHttp(source: AdminSource): Promise<AdminRolesResult> {
-  const res = await fetch(`/api/dashboard/admin/roles?source=${encodeURIComponent(source)}`, {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-    headers: { accept: "application/json" },
-  });
+export async function fetchAdminRolesHttp(
+  source: AdminSource,
+): Promise<AdminRolesResult> {
+  return adminFetch(
+    `/api/dashboard/admin/roles?source=${encodeURIComponent(source)}`,
+  );
+}
 
-  const json = await readJson<AdminRolesResult & { error?: string }>(res);
-  if (res.status === 401) {
-    throw new Error("Sessão expirada. Faça login novamente.");
-  }
-  if (!res.ok) {
-    throw new Error(parseError(json, `Falha ao carregar roles (${res.status}).`));
-  }
-  return json as AdminRolesResult;
+export async function fetchWagooPromoLinksHttp(): Promise<WagooPromoLink[]> {
+  return adminFetch("/api/dashboard/admin/wagoo/promo-links");
+}
+
+export async function createWagooPromoLinkHttp(input: {
+  label?: string;
+  complimentary_days?: number;
+  max_redemptions?: number | null;
+  expires_at?: string | null;
+}): Promise<WagooPromoLink> {
+  return adminFetch("/api/dashboard/admin/wagoo/promo-links", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchWagooPromoLinkActiveHttp(input: {
+  id: string;
+  is_active: boolean;
+}): Promise<WagooPromoLink> {
+  return adminFetch(
+    `/api/dashboard/admin/wagoo/promo-links/${encodeURIComponent(input.id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: input.is_active }),
+    },
+  );
+}
+
+export async function deleteWagooPromoLinkHttp(input: {
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  return adminFetch(
+    `/api/dashboard/admin/wagoo/promo-links/${encodeURIComponent(input.id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function fetchTwoAvendasPromoLinksHttp(): Promise<
+  TwoAvendasPromoLink[]
+> {
+  return adminFetch("/api/dashboard/admin/2avendas/promo-links");
+}
+
+export async function createTwoAvendasPromoLinkHttp(input: {
+  label?: string;
+  complimentary_days?: number;
+  max_redemptions?: number | null;
+}): Promise<TwoAvendasPromoLink> {
+  return adminFetch("/api/dashboard/admin/2avendas/promo-links", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchTwoAvendasPromoLinkActiveHttp(input: {
+  id: string;
+  is_active: boolean;
+}): Promise<TwoAvendasPromoLink> {
+  return adminFetch(
+    `/api/dashboard/admin/2avendas/promo-links/${encodeURIComponent(input.id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: input.is_active }),
+    },
+  );
+}
+
+export async function deleteTwoAvendasPromoLinkHttp(input: {
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  return adminFetch(
+    `/api/dashboard/admin/2avendas/promo-links/${encodeURIComponent(input.id)}`,
+    { method: "DELETE" },
+  );
 }

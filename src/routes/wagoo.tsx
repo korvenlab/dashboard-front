@@ -8,12 +8,12 @@ import {
   useKorvenDashboard,
 } from "@/lib/dashboard-context";
 import {
-  createWagooPromoLink,
-  deleteWagooPromoLink,
-  fetchWagooPromoLinks,
-  patchWagooPromoLinkActive,
+  createWagooPromoLinkHttp,
+  deleteWagooPromoLinkHttp,
+  fetchWagooPromoLinksHttp,
+  patchWagooPromoLinkActiveHttp,
   type WagooPromoLink,
-} from "@/lib/admin-api";
+} from "@/lib/admin-http";
 import {
   fetchRecentPaymentsHttp,
   type CentralPaymentHttpRow,
@@ -68,9 +68,7 @@ function WagooPromoLinksPanel() {
     setLoading(true);
     setMessage("");
     try {
-      const list = (await fetchWagooPromoLinks({
-        data: { source: "wagoo" },
-      })) as WagooPromoLink[];
+      const list = await fetchWagooPromoLinksHttp();
       setItems(Array.isArray(list) ? list : []);
     } catch (e) {
       setItems([]);
@@ -88,15 +86,12 @@ function WagooPromoLinksPanel() {
     setMessage("");
     try {
       const maxRaw = maxUses.trim();
-      await createWagooPromoLink({
-        data: {
-          source: "wagoo",
-          label: label.trim() || undefined,
-          complimentary_days: resolvedComplimentaryDays(),
-          ...(maxRaw !== ""
-            ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) }
-            : {}),
-        },
+      await createWagooPromoLinkHttp({
+        label: label.trim() || undefined,
+        complimentary_days: resolvedComplimentaryDays(),
+        ...(maxRaw !== ""
+          ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) }
+          : {}),
       });
       setLabel("");
       setMaxUses("");
@@ -110,8 +105,9 @@ function WagooPromoLinksPanel() {
   async function setActive(id: string, is_active: boolean) {
     setMessage("");
     try {
-      await patchWagooPromoLinkActive({
-        data: { source: "wagoo", id, is_active },
+      await patchWagooPromoLinkActiveHttp({
+        id,
+        is_active,
       });
       await load();
     } catch (e) {
@@ -130,7 +126,7 @@ function WagooPromoLinksPanel() {
     setMessage("");
     setDeletingId(row.id);
     try {
-      await deleteWagooPromoLink({ data: { source: "wagoo", id: row.id } });
+      await deleteWagooPromoLinkHttp({ id: row.id });
       await load();
       setMessage("Link removido.");
     } catch (e) {

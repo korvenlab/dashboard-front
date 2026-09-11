@@ -689,15 +689,73 @@ export type WagooPromoLink = {
   signup_url?: string;
 };
 
+export async function listWagooPromoLinks(): Promise<WagooPromoLink[]> {
+  const raw = await callAdminApi("wagoo", "GET", "/api/admin/wagoo/promo-links");
+  const root = asRecord(raw);
+  const payload = asRecord(root?.data) ?? {};
+  const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
+  return itemsRaw as WagooPromoLink[];
+}
+
+export async function createWagooPromoLinkService(input: {
+  label?: string;
+  complimentary_days?: number;
+  max_redemptions?: number | null;
+  expires_at?: string | null;
+}): Promise<WagooPromoLink> {
+  const body: Record<string, unknown> = {};
+  if (input.label != null) body.label = input.label;
+  if (input.complimentary_days != null) {
+    body.complimentary_days = input.complimentary_days;
+  }
+  if (input.max_redemptions !== undefined) {
+    body.max_redemptions = input.max_redemptions;
+  }
+  if (input.expires_at !== undefined) body.expires_at = input.expires_at;
+  const raw = await callAdminApi(
+    "wagoo",
+    "POST",
+    "/api/admin/wagoo/promo-links",
+    body,
+  );
+  const root = asRecord(raw);
+  return (root?.data ?? {}) as WagooPromoLink;
+}
+
+export async function patchWagooPromoLinkActiveService(input: {
+  id: string;
+  is_active: boolean;
+}): Promise<WagooPromoLink> {
+  const raw = await callAdminApi(
+    "wagoo",
+    "PATCH",
+    `/api/admin/wagoo/promo-links/${encodeURIComponent(input.id)}`,
+    { is_active: input.is_active },
+  );
+  const root = asRecord(raw);
+  return (root?.data ?? {}) as WagooPromoLink;
+}
+
+export async function deleteWagooPromoLinkService(input: {
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  const raw = await callAdminApi(
+    "wagoo",
+    "DELETE",
+    `/api/admin/wagoo/promo-links/${encodeURIComponent(input.id)}`,
+  );
+  const root = asRecord(raw);
+  const out = asRecord(root?.data) ?? {};
+  return {
+    id: asString(out.id) ?? input.id,
+    deleted: asBool(out.deleted, true),
+  };
+}
+
 export const fetchWagooPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({ source: z.literal("wagoo") }))
-  .handler((async (ctx: unknown): Promise<WagooPromoLink[]> => {
-    const { data } = ctx as { data: { source: "wagoo" } };
-    const raw = await callAdminApi(data.source, "GET", "/api/admin/wagoo/promo-links");
-    const root = asRecord(raw);
-    const payload = asRecord(root?.data) ?? {};
-    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-    return itemsRaw as WagooPromoLink[];
+  .handler((async (): Promise<WagooPromoLink[]> => {
+    return listWagooPromoLinks();
   }) as any);
 
 const createPromoSchema = z.object({
@@ -712,14 +770,7 @@ export const createWagooPromoLink = protectedServerFn("POST")
   .inputValidator(createPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createPromoSchema> };
-    const body: Record<string, unknown> = {};
-    if (data.label != null) body.label = data.label;
-    if (data.complimentary_days != null) body.complimentary_days = data.complimentary_days;
-    if (data.max_redemptions !== undefined) body.max_redemptions = data.max_redemptions;
-    if (data.expires_at !== undefined) body.expires_at = data.expires_at;
-    const raw = await callAdminApi(data.source, "POST", "/api/admin/wagoo/promo-links", body);
-    const root = asRecord(raw);
-    return (root?.data ?? {}) as WagooPromoLink;
+    return createWagooPromoLinkService(data);
   }) as any);
 
 const patchPromoSchema = z.object({
@@ -732,14 +783,7 @@ export const patchWagooPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchPromoSchema> };
-    const raw = await callAdminApi(
-      data.source,
-      "PATCH",
-      `/api/admin/wagoo/promo-links/${encodeURIComponent(data.id)}`,
-      { is_active: data.is_active },
-    );
-    const root = asRecord(raw);
-    return (root?.data ?? {}) as WagooPromoLink;
+    return patchWagooPromoLinkActiveService(data);
   }) as any);
 
 const deletePromoSchema = z.object({
@@ -751,17 +795,7 @@ export const deleteWagooPromoLink = protectedServerFn("POST")
   .inputValidator(deletePromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deletePromoSchema> };
-    const raw = await callAdminApi(
-      data.source,
-      "DELETE",
-      `/api/admin/wagoo/promo-links/${encodeURIComponent(data.id)}`,
-    );
-    const root = asRecord(raw);
-    const out = asRecord(root?.data) ?? {};
-    return {
-      id: asString(out.id) ?? data.id,
-      deleted: asBool(out.deleted, true),
-    };
+    return deleteWagooPromoLinkService(data);
   }) as any);
 
 export const deleteAdminUser = protectedServerFn("POST")
@@ -875,13 +909,64 @@ async function twoAvendasBillingRequest(
   return root ?? {};
 }
 
+export async function listTwoAvendasPromoLinks(): Promise<TwoAvendasPromoLink[]> {
+  const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
+  const payload = asRecord(root?.data) ?? {};
+  const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
+  return itemsRaw as TwoAvendasPromoLink[];
+}
+
+export async function createTwoAvendasPromoLinkService(input: {
+  label?: string;
+  complimentary_days?: number;
+  max_redemptions?: number | null;
+}): Promise<TwoAvendasPromoLink> {
+  const body: Record<string, unknown> = {};
+  if (input.label != null) body.label = input.label;
+  if (input.complimentary_days != null) {
+    body.complimentary_days = input.complimentary_days;
+  }
+  if (input.max_redemptions !== undefined) {
+    body.max_redemptions = input.max_redemptions;
+  }
+  const root = await twoAvendasBillingRequest(
+    "POST",
+    "/api/billing/promo-links",
+    body,
+  );
+  return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+}
+
+export async function patchTwoAvendasPromoLinkActiveService(input: {
+  id: string;
+  is_active: boolean;
+}): Promise<TwoAvendasPromoLink> {
+  const root = await twoAvendasBillingRequest(
+    "PATCH",
+    `/api/billing/promo-links/${encodeURIComponent(input.id)}`,
+    { is_active: input.is_active },
+  );
+  return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+}
+
+export async function deleteTwoAvendasPromoLinkService(input: {
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  const root = await twoAvendasBillingRequest(
+    "DELETE",
+    `/api/billing/promo-links/${encodeURIComponent(input.id)}`,
+  );
+  const out = asRecord(root?.data) ?? {};
+  return {
+    id: asString(out.id) ?? input.id,
+    deleted: asBool(out.deleted, true),
+  };
+}
+
 export const fetchTwoAvendasPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({}))
   .handler((async (): Promise<TwoAvendasPromoLink[]> => {
-    const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
-    const payload = asRecord(root?.data) ?? {};
-    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-    return itemsRaw as TwoAvendasPromoLink[];
+    return listTwoAvendasPromoLinks();
   }) as any);
 
 const createTwoAvendasPromoSchema = z.object({
@@ -894,12 +979,7 @@ export const createTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(createTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createTwoAvendasPromoSchema> };
-    const body: Record<string, unknown> = {};
-    if (data.label != null) body.label = data.label;
-    if (data.complimentary_days != null) body.complimentary_days = data.complimentary_days;
-    if (data.max_redemptions !== undefined) body.max_redemptions = data.max_redemptions;
-    const root = await twoAvendasBillingRequest("POST", "/api/billing/promo-links", body);
-    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+    return createTwoAvendasPromoLinkService(data);
   }) as any);
 
 const patchTwoAvendasPromoSchema = z.object({
@@ -911,12 +991,7 @@ export const patchTwoAvendasPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchTwoAvendasPromoSchema> };
-    const root = await twoAvendasBillingRequest(
-      "PATCH",
-      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
-      { is_active: data.is_active },
-    );
-    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
+    return patchTwoAvendasPromoLinkActiveService(data);
   }) as any);
 
 const deleteTwoAvendasPromoSchema = z.object({
@@ -927,13 +1002,5 @@ export const deleteTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(deleteTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deleteTwoAvendasPromoSchema> };
-    const root = await twoAvendasBillingRequest(
-      "DELETE",
-      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
-    );
-    const out = asRecord(root?.data) ?? {};
-    return {
-      id: asString(out.id) ?? data.id,
-      deleted: asBool(out.deleted, true),
-    };
+    return deleteTwoAvendasPromoLinkService(data);
   }) as any);

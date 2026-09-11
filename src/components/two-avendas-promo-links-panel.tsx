@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import {
-  createTwoAvendasPromoLink,
-  deleteTwoAvendasPromoLink,
-  fetchTwoAvendasPromoLinks,
-  patchTwoAvendasPromoLinkActive,
+  createTwoAvendasPromoLinkHttp,
+  deleteTwoAvendasPromoLinkHttp,
+  fetchTwoAvendasPromoLinksHttp,
+  patchTwoAvendasPromoLinkActiveHttp,
   type TwoAvendasPromoLink,
-} from "@/lib/admin-api";
+} from "@/lib/admin-http";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,7 +51,7 @@ export function TwoAvendasPromoLinksPanel() {
     setLoading(true);
     setMessage("");
     try {
-      const list = (await fetchTwoAvendasPromoLinks({ data: {} })) as TwoAvendasPromoLink[];
+      const list = await fetchTwoAvendasPromoLinksHttp();
       setItems(Array.isArray(list) ? list : []);
     } catch (e) {
       setItems([]);
@@ -69,12 +69,10 @@ export function TwoAvendasPromoLinksPanel() {
     setMessage("");
     try {
       const maxRaw = maxUses.trim();
-      await createTwoAvendasPromoLink({
-        data: {
-          label: label.trim() || undefined,
-          complimentary_days: resolvedComplimentaryDays(),
-          ...(maxRaw !== "" ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) } : {}),
-        },
+      await createTwoAvendasPromoLinkHttp({
+        label: label.trim() || undefined,
+        complimentary_days: resolvedComplimentaryDays(),
+        ...(maxRaw !== "" ? { max_redemptions: Math.max(1, Number(maxRaw) || 1) } : {}),
       });
       setLabel("");
       setMaxUses("");
@@ -88,7 +86,7 @@ export function TwoAvendasPromoLinksPanel() {
   async function setActive(id: string, is_active: boolean) {
     setMessage("");
     try {
-      await patchTwoAvendasPromoLinkActive({ data: { id, is_active } });
+      await patchTwoAvendasPromoLinkActiveHttp({ id, is_active });
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -106,7 +104,7 @@ export function TwoAvendasPromoLinksPanel() {
     setMessage("");
     setDeletingId(row.id);
     try {
-      await deleteTwoAvendasPromoLink({ data: { id: row.id } });
+      await deleteTwoAvendasPromoLinkHttp({ id: row.id });
       await load();
       setMessage("Link removido.");
     } catch (e) {
