@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   fetchMpWebhookMonitoring,
   fetchUptimeMonitoring,
@@ -62,6 +62,7 @@ function MonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<UptimeMonitoringResponse | null>(null);
+  const [uptimeSkipped, setUptimeSkipped] = useState(false);
 
   const [mpLoading, setMpLoading] = useState(true);
   const [mpError, setMpError] = useState("");
@@ -91,11 +92,19 @@ function MonitoringPage() {
     void (async () => {
       setLoading(true);
       setError("");
+      setUptimeSkipped(false);
       try {
         const result = (await fetchUptimeMonitoring({
           data: { force_refresh: false, full: false },
         })) as UptimeMonitoringResponse;
-        if (!cancelled) setData(result);
+        if (cancelled) return;
+        if (result.skipped) {
+          setUptimeSkipped(true);
+          setData(null);
+          setError("");
+        } else {
+          setData(result);
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -122,7 +131,8 @@ function MonitoringPage() {
           Monitoramento
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Atualiza ao abrir a página · webhooks Mercado Pago + UptimeRobot (só ops).
+          Atualiza ao abrir · Mercado Pago via Supabase · UptimeRobot opcional (API
+          direta).
         </p>
       </div>
 
@@ -185,20 +195,10 @@ function MonitoringPage() {
                 <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   Tópicos 24h
                 </div>
-                <div className="mt-2 space-y-1">
-                  {topicEntries.length === 0 ? (
-                    <span className="font-mono text-xs text-muted-foreground">Nenhum</span>
-                  ) : (
-                    topicEntries.slice(0, 6).map(([topic, n]) => (
-                      <div
-                        key={topic}
-                        className="flex justify-between gap-2 font-mono text-[11px]"
-                      >
-                        <span className="truncate text-muted-foreground">{topic}</span>
-                        <span>{n}</span>
-                      </div>
-                    ))
-                  )}
+                <div className="mt-1 font-mono text-xs">
+                  {topicEntries.length
+                    ? topicEntries.map(([k, v]) => `${k}: ${v}`).join(" · ")
+                    : "—"}
                 </div>
               </div>
             </div>
@@ -211,36 +211,29 @@ function MonitoringPage() {
                       Quando
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      Tópico
+                      Topic
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      ID
-                    </th>
-                    <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      Status / action
+                      Data ID
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
                       Kind
+                    </th>
+                    <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                      Fonte
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {mpData.events.map((e) => (
-                    <tr key={`${e.id}-${e.data_id}`} className="border-b border-border/50">
+                    <tr key={String(e.id)} className="border-b border-border/50">
                       <td className="px-3 py-2 font-mono text-xs">
                         {new Date(e.processed_at).toLocaleString("pt-BR")}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{e.topic}</td>
                       <td className="px-3 py-2 font-mono text-xs">{e.data_id}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{e.action ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {e.kind ??
-                          (e.live_mode === true
-                            ? "live"
-                            : e.live_mode === false
-                              ? "test"
-                              : "—")}
-                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{e.kind ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{e.source ?? "—"}</td>
                     </tr>
                   ))}
                   {mpData.events.length === 0 ? (
@@ -249,8 +242,7 @@ function MonitoringPage() {
                         colSpan={5}
                         className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
                       >
-                        Nenhum evento MP no Supabase ainda. Após um webhook ingerido,
-                        aparece aqui.
+                        Nenhum evento MP no Supabase ainda.
                       </td>
                     </tr>
                   ) : null}
@@ -258,12 +250,12 @@ function MonitoringPage() {
               </table>
             </div>
 
-            {mpData.runtime_signals.length > 0 ? (
-              <div className="space-y-2">
-                <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Sinais / notificações MP
+            {mpData.runtime_signals.length ? (
+              <div>
+                <h3 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Sinais recentes
                 </h3>
-                <ul className="space-y-1">
+                <ul className="mt-2 space-y-1">
                   {mpData.runtime_signals.map((s) => (
                     <li
                       key={s.id}
@@ -291,12 +283,19 @@ function MonitoringPage() {
             UptimeRobot
           </h2>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            Cache ~10 min no servidor.
+            Opcional · usa UPTIMEROBOT_API_KEY no ambiente Vercel (sem backend Render).
           </p>
         </div>
 
         {loading ? (
           <p className="font-mono text-xs text-muted-foreground">Carregando monitores…</p>
+        ) : null}
+
+        {uptimeSkipped ? (
+          <div className="rounded border border-border bg-card/30 px-3 py-2 font-mono text-xs text-muted-foreground">
+            UptimeRobot não configurado (defina UPTIMEROBOT_API_KEY). O bloco Mercado Pago
+            acima não depende disso.
+          </div>
         ) : null}
 
         {error ? (
@@ -305,7 +304,7 @@ function MonitoringPage() {
           </div>
         ) : null}
 
-        {data ? (
+        {data && !data.skipped ? (
           <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded border border-border bg-card/40 p-3">
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -330,75 +329,77 @@ function MonitoringPage() {
           </section>
         ) : null}
 
-        <section className="overflow-x-auto rounded border border-border">
-          <table className="w-full min-w-[1100px] border-collapse">
-            <thead>
-              <tr className="border-b border-border bg-card">
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Monitor
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Código
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  URL
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Uptime
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Intervalo
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Incidentes
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                  Latência Atual
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.monitors.map((m) => {
-                const currentMs = latestResponseMs(m.responseTimes);
-                return (
-                  <tr key={`${m.id ?? m.name}`} className="border-b border-border/50">
-                    <td className="px-3 py-2 font-mono text-xs">{m.name}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded border px-2 py-0.5 font-mono text-xs ${statusClass(m.status)}`}
-                      >
-                        {m.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{m.statusCode}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{m.url ?? "—"}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{m.uptimeRatio ?? "—"}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{m.interval ?? "—"}</td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {countRecentIncidents(m.logs)}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {currentMs !== null ? `${currentMs} ms` : "—"}
+        {data && !data.skipped ? (
+          <section className="overflow-x-auto rounded border border-border">
+            <table className="w-full min-w-[1100px] border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-card">
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Monitor
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Código
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    URL
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Uptime
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Intervalo
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Incidentes
+                  </th>
+                  <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                    Latência Atual
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.monitors.map((m) => {
+                  const currentMs = latestResponseMs(m.responseTimes);
+                  return (
+                    <tr key={`${m.id ?? m.name}`} className="border-b border-border/50">
+                      <td className="px-3 py-2 font-mono text-xs">{m.name}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`rounded border px-2 py-0.5 font-mono text-xs ${statusClass(m.status)}`}
+                        >
+                          {m.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{m.statusCode}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{m.url ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{m.uptimeRatio ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{m.interval ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {countRecentIncidents(m.logs)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {currentMs !== null ? `${currentMs} ms` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!loading && data.monitors.length === 0 && !error ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
+                    >
+                      Nenhum monitor retornado pela API.
                     </td>
                   </tr>
-                );
-              })}
-              {!loading && (!data || data.monitors.length === 0) && !error ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
-                  >
-                    Nenhum monitor retornado pela API.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </section>
+                ) : null}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
       </section>
     </div>
   );

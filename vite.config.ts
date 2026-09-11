@@ -22,6 +22,18 @@ export default defineConfig({
       server: { entry: "server" },
     }),
     viteReact(),
-    nitro(),
+    // Sem prefixo NITRO_: SUPABASE_* / UPTIMEROBOT_* da Vercel mapeiam no runtimeConfig.
+    nitro({
+      runtimeConfig: {
+        nitro: { envPrefix: "" },
+        supabaseUrl: "",
+        viteSupabaseUrl: "",
+        supabaseAnonKey: "",
+        supabasePublishableKey: "",
+        viteSupabasePublishableKey: "",
+        supabaseServiceRoleKey: "",
+        uptimerobotApiKey: "",
+      },
+    }),
   ],
 });

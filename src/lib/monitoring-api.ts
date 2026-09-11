@@ -1,7 +1,7 @@
 import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { listMpCentralMonitoring } from "@/lib/central-service";
-import { getDashboardBackendEnv } from "@/lib/server-env";
+import { getUptimeRobotApiKey } from "@/lib/server-env";
 
 type UptimeMonitor = {
   id: number | string | null;
@@ -24,6 +24,9 @@ export type UptimeMonitoringResponse = {
   total: number;
   monitors: UptimeMonitor[];
   raw: Record<string, unknown>;
+  /** true quando UPTIMEROBOT_API_KEY não está no ambiente — não é erro. */
+  skipped?: boolean;
+  message?: string;
 };
 
 export type MpWebhookMonitorEvent = {
@@ -59,7 +62,9 @@ export type MpWebhookMonitorResponse = {
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
 }
 
 function asArray(v: unknown): unknown[] {
@@ -70,71 +75,104 @@ function asStringOrNumberOrNull(v: unknown): string | number | null {
   return typeof v === "string" || typeof v === "number" ? v : null;
 }
 
+const UPTIME_STATUS: Record<number, string> = {
+  0: "Paused",
+  1: "Not checked yet",
+  2: "Online",
+  8: "Seems down",
+  9: "Offline",
+};
+
 const monitoringQuerySchema = z.object({
   force_refresh: z.boolean().optional(),
   full: z.boolean().optional(),
 });
 
+/**
+ * UptimeRobot direto na API oficial — sem backend Render / DASHBOARD_BACKEND_*.
+ * Requer UPTIMEROBOT_API_KEY no projeto Vercel `dashboard-front`.
+ */
 export const fetchUptimeMonitoring = protectedServerFn("GET")
   .inputValidator(monitoringQuerySchema)
-  .handler((async (ctx: unknown): Promise<UptimeMonitoringResponse> => {
-    const { data } = ctx as { data: z.infer<typeof monitoringQuerySchema> };
-    const env = getDashboardBackendEnv();
-    const base = env.apiBaseUrl?.trim();
-    const key = env.metricsApiKey?.trim();
-    if (!base) {
-      throw new Error(
-        "UptimeRobot indisponível (DASHBOARD_BACKEND_BASE_URL ausente). O bloco Mercado Pago usa só Supabase.",
-      );
+  .handler((async (_ctx: unknown): Promise<UptimeMonitoringResponse> => {
+    const apiKey = getUptimeRobotApiKey();
+    if (!apiKey) {
+      return {
+        ok: true,
+        skipped: true,
+        message:
+          "UPTIMEROBOT_API_KEY ausente. O bloco Mercado Pago usa só Supabase.",
+        fetchedAt: new Date().toISOString(),
+        stat: "skipped",
+        total: 0,
+        monitors: [],
+        raw: {},
+      };
     }
 
-    const url = new URL(`${base.replace(/\/+$/, "")}/monitoring/uptimerobot`);
-    if (data.force_refresh) url.searchParams.set("refresh", "1");
-    if (data.full) url.searchParams.set("full", "1");
+    const body = new URLSearchParams({
+      api_key: apiKey,
+      format: "json",
+      logs: "1",
+      response_times: "1",
+      response_times_limit: "5",
+    });
 
-    const res = await fetch(url.toString(), {
+    const res = await fetch("https://api.uptimerobot.com/v2/getMonitors", {
+      method: "POST",
       headers: {
-        Accept: "application/json",
-        ...(key ? { Authorization: `Bearer ${key}`, "X-API-Key": key } : {}),
-        ...(data.full ? { "X-Korven-Uptime-Full": "1" } : {}),
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Cache-Control": "no-cache",
       },
+      body,
     });
 
     const text = await res.text();
-    const json = text ? (JSON.parse(text) as unknown) : {};
+    let json: unknown = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`UptimeRobot respondeu JSON inválido (HTTP ${res.status})`);
+    }
     const root = asRecord(json);
-    if (!res.ok || root.ok === false) {
+    if (!res.ok || root.stat === "fail") {
       const message =
-        typeof root.message === "string"
-          ? root.message
-          : `Falha ao carregar UptimeRobot (HTTP ${res.status})`;
+        typeof root.error === "object" && root.error
+          ? JSON.stringify(root.error)
+          : typeof root.message === "string"
+            ? root.message
+            : `Falha UptimeRobot (HTTP ${res.status})`;
       throw new Error(message);
     }
 
     const monitors = asArray(root.monitors).map((item) => {
       const r = asRecord(item);
+      const statusCode = typeof r.status === "number" ? r.status : -1;
       return {
         id: asStringOrNumberOrNull(r.id),
-        name: typeof r.name === "string" ? r.name : "Sem nome",
+        name: typeof r.friendly_name === "string" ? r.friendly_name : "Sem nome",
         url: typeof r.url === "string" ? r.url : null,
-        statusCode: typeof r.statusCode === "number" ? r.statusCode : -1,
-        status: typeof r.status === "string" ? r.status : "Unknown",
+        statusCode,
+        status: UPTIME_STATUS[statusCode] ?? String(statusCode),
         type: asStringOrNumberOrNull(r.type),
         interval: asStringOrNumberOrNull(r.interval),
-        uptimeRatio: (r.uptimeRatio as string | number | null | undefined) ?? null,
-        createDatetime: (r.createDatetime as string | number | null | undefined) ?? null,
+        uptimeRatio:
+          (r.all_time_uptime_ratio as string | number | null | undefined) ??
+          null,
+        createDatetime:
+          (r.create_datetime as string | number | null | undefined) ?? null,
         logs: asArray(r.logs),
-        responseTimes: asArray(r.responseTimes),
+        responseTimes: asArray(r.response_times),
       };
     });
 
     return {
       ok: true,
-      fetchedAt: typeof root.fetchedAt === "string" ? root.fetchedAt : new Date().toISOString(),
-      stat: typeof root.stat === "string" ? root.stat : "unknown",
-      total: typeof root.total === "number" ? root.total : monitors.length,
+      fetchedAt: new Date().toISOString(),
+      stat: typeof root.stat === "string" ? root.stat : "ok",
+      total: monitors.length,
       monitors,
-      raw: asRecord(root.raw ?? root),
+      raw: root,
     };
   }) as any);
 

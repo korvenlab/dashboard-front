@@ -49,8 +49,49 @@ export function stripEnvNoise(v: string | undefined): string | undefined {
 }
 
 /**
- * Leitura dinâmica de env. Nunca use `process.env.NOME` literal — o bundler Vite/Nitro
- * pode substituir por string vazia no build e quebrar o runtime.
+ * Acesso estático a `process.env.NOME` — necessário para Vite/Nitro/Vercel
+ * injetarem os valores no build do server. Acesso dinâmico `process.env[name]`
+ * frequentemente chega vazio no runtime da Function.
+ */
+function staticEnvBag(): Record<string, string | undefined> {
+  return {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
+    VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    UPTIMEROBOT_API_KEY: process.env.UPTIMEROBOT_API_KEY,
+    UPTIMEROBOT_WEBHOOK_SECRET: process.env.UPTIMEROBOT_WEBHOOK_SECRET,
+    WAGOO_API_BASE_URL: process.env.WAGOO_API_BASE_URL,
+    WAGOO_BACKEND_URL: process.env.WAGOO_BACKEND_URL,
+    WAG_BACKEND_URL: process.env.WAG_BACKEND_URL,
+    WAGOO_METRICS_API_KEY: process.env.WAGOO_METRICS_API_KEY,
+    METRICS_API_KEY: process.env.METRICS_API_KEY,
+    ADMIN_API_SECRET: process.env.ADMIN_API_SECRET,
+    WAGOO_API_SECRET: process.env.WAGOO_API_SECRET,
+    DASHBOARD_BACKEND_BASE_URL: process.env.DASHBOARD_BACKEND_BASE_URL,
+    DASHBOARD_BACKEND_API_KEY: process.env.DASHBOARD_BACKEND_API_KEY,
+    TWO_AVENDAS_API_BASE_URL: process.env.TWO_AVENDAS_API_BASE_URL,
+    TWO_AVENDAS_METRICS_API_KEY: process.env.TWO_AVENDAS_METRICS_API_KEY,
+    TWO_AVENDAS_BILLING_ADMIN_SECRET: process.env.TWO_AVENDAS_BILLING_ADMIN_SECRET,
+    TWO_AVENDAS_API_SECRET: process.env.TWO_AVENDAS_API_SECRET,
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WAGOO_PRICE_IDS: process.env.STRIPE_WAGOO_PRICE_IDS,
+    STRIPE_2AVENDAS_PRICE_IDS: process.env.STRIPE_2AVENDAS_PRICE_IDS,
+    KORVEN_DASHBOARD_USER: process.env.KORVEN_DASHBOARD_USER,
+    KORVEN_DASHBOARD_PASSWORD: process.env.KORVEN_DASHBOARD_PASSWORD,
+    KORVEN_SESSION_SECRET: process.env.KORVEN_SESSION_SECRET,
+    FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN,
+    WAGOO_INGEST_SECRET: process.env.WAGOO_INGEST_SECRET,
+  };
+}
+
+/**
+ * Leitura de env no server. Preferência:
+ * 1) Cloudflare bindings
+ * 2) Mapa estático (build Vercel)
+ * 3) process.env dinâmico (Node runtime)
  */
 export function envGet(name: string): string | undefined {
   const g = globalThis as typeof globalThis & {
@@ -58,8 +99,23 @@ export function envGet(name: string): string | undefined {
   };
   const fromCf = stripEnvNoise(g.cloudflare?.env?.[name]);
   if (fromCf) return fromCf;
-  if (typeof process === "undefined" || !process.env) return undefined;
-  return stripEnvNoise(process.env[name]);
+
+  const fromStatic = stripEnvNoise(staticEnvBag()[name]);
+  if (fromStatic) return fromStatic;
+
+  try {
+    const pe = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process?.["env"];
+    const fromPe = stripEnvNoise(pe?.[name]);
+    if (fromPe) return fromPe;
+  } catch {
+    /* ignore */
+  }
+
+  if (typeof process !== "undefined" && process.env) {
+    return stripEnvNoise(process.env[name]);
+  }
+  return undefined;
 }
 
 function firstNonEmptyTrimmed(
@@ -130,6 +186,10 @@ export function getDashboardBackendEnv(): DashboardBackendEnv {
     url: "DASHBOARD_BACKEND_BASE_URL",
     key: "DASHBOARD_BACKEND_API_KEY",
   });
+}
+
+export function getUptimeRobotApiKey(): string | undefined {
+  return envGet("UPTIMEROBOT_API_KEY");
 }
 
 function decodeJwtPayload(
