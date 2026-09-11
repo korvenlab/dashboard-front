@@ -122,11 +122,109 @@ export function getCentralHealth() {
       accessLink: "POST /api/dashboard/central/access-link",
       notifications: "GET /api/dashboard/central/notifications",
       notificationMutate: "POST /api/dashboard/central/notifications",
+      payments: "GET /api/dashboard/central/payments",
       publicConfig: "GET /api/dashboard/central/public-config",
       metrics: "GET /api/dashboard/metrics",
     },
     env: diag,
   };
+}
+
+export type CentralPaymentRow = {
+  id: string;
+  provider: "mercadopago" | "stripe" | "unknown";
+  event_type: string | null;
+  status: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  plan: string | null;
+  kind: string | null;
+  object_id: string | null;
+  created_at: string;
+};
+
+function resolvePaymentProvider(payload: unknown): CentralPaymentRow["provider"] {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return "unknown";
+  }
+  const root = payload as Record<string, unknown>;
+  const nested =
+    root.payload && typeof root.payload === "object" && !Array.isArray(root.payload)
+      ? (root.payload as Record<string, unknown>)
+      : root;
+  if (nested.provider === "mercadopago" || nested.provider === "stripe") {
+    return nested.provider;
+  }
+  if (typeof nested.mercadopago_payment_id === "string") return "mercadopago";
+  if (typeof nested.stripe_event_id === "string") return "stripe";
+  if (
+    typeof root.stripe_event_id === "string" &&
+    root.stripe_event_id.startsWith("mp:")
+  ) {
+    return "mercadopago";
+  }
+  if (typeof root.stripe_event_id === "string") return "stripe";
+  return "unknown";
+}
+
+export async function listRecentPayments(input?: {
+  product?: "wagoo" | "2avendas";
+  limit?: number;
+}): Promise<CentralPaymentRow[]> {
+  const limit = Math.min(100, Math.max(1, input?.limit ?? 40));
+  const supabase = getSupabaseServerClient({ admin: true });
+  let productId: string | null = null;
+  if (input?.product) {
+    const { data: product, error } = await supabase
+      .from("products")
+      .select("id")
+      .eq("slug", input.product)
+      .maybeSingle();
+    throwSupabase(error, "Falha ao resolver produto");
+    productId = product?.id ? String(product.id) : null;
+  }
+  let query = supabase
+    .from("payment_events")
+    .select(
+      "id,event_type,status,amount,currency,plan,stripe_event_id,stripe_object_id,payload,created_at,product_id",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (productId) query = query.eq("product_id", productId);
+  const { data, error } = await query;
+  throwSupabase(error, "Falha ao consultar pagamentos recentes");
+  return rows(data).map((row) => {
+    const payload = row.payload;
+    const nested =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? ((payload as Row).payload &&
+          typeof (payload as Row).payload === "object" &&
+          !Array.isArray((payload as Row).payload)
+            ? ((payload as Row).payload as Row)
+            : (payload as Row))
+        : {};
+    const meta =
+      nested.metadata &&
+      typeof nested.metadata === "object" &&
+      !Array.isArray(nested.metadata)
+        ? (nested.metadata as Row)
+        : {};
+    return {
+      id: str(row.id) ?? "",
+      provider: resolvePaymentProvider(payload),
+      event_type: str(row.event_type),
+      status: str(row.status),
+      amount_cents:
+        typeof row.amount === "number" && Number.isFinite(row.amount)
+          ? row.amount
+          : null,
+      currency: str(row.currency),
+      plan: str(row.plan) ?? str(nested.plan) ?? str(meta.plan),
+      kind: str(nested.kind) ?? str(meta.kind),
+      object_id: str(row.stripe_object_id) ?? str(row.stripe_event_id),
+      created_at: str(row.created_at) ?? new Date().toISOString(),
+    } satisfies CentralPaymentRow;
+  });
 }
 
 export async function listUnifiedUsers(
@@ -324,7 +422,7 @@ export async function listNotifications(includeArchived = false) {
     href:
       item.user_id && typeof item.user_id === "string"
         ? `/admin?user=${encodeURIComponent(item.user_id)}`
-        : null,
+        : "/wagoo",
     context: (item.data ?? null) as Notification["context"],
     read_at: str(item.read_at),
     archived_at: str(item.archived_at),

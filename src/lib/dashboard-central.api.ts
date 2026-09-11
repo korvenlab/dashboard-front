@@ -4,6 +4,7 @@ import {
   getPublicSupabaseConfig,
   getUnifiedUserDetails,
   listNotifications,
+  listRecentPayments,
   listUnifiedUsers,
   mutateNotificationService,
   runCentralAdminCommand,
@@ -150,6 +151,24 @@ export async function handleDashboardCentralApi(
       const includeArchived =
         url.searchParams.get("includeArchived") === "true";
       return jsonOk(await listNotifications(includeArchived));
+    }
+
+    if (
+      pathname === "/api/dashboard/central/payments" &&
+      request.method === "GET"
+    ) {
+      const productRaw = url.searchParams.get("product");
+      const product =
+        productRaw === "wagoo" || productRaw === "2avendas"
+          ? productRaw
+          : undefined;
+      const limit = Number(url.searchParams.get("limit") ?? 40);
+      return jsonOk(
+        await listRecentPayments({
+          product,
+          limit: Number.isFinite(limit) ? limit : 40,
+        }),
+      );
     }
 
     if (

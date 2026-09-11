@@ -164,6 +164,11 @@ export function NotificationCenter() {
                       {item.message}
                     </p>
                   ) : null}
+                  {item.level ? (
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {item.level}
+                    </p>
+                  ) : null}
                   <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                     {new Date(item.created_at).toLocaleString("pt-BR")}
                   </p>

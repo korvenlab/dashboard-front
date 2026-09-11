@@ -14,6 +14,10 @@ import {
   patchWagooPromoLinkActive,
   type WagooPromoLink,
 } from "@/lib/admin-api";
+import {
+  fetchRecentPaymentsHttp,
+  type CentralPaymentHttpRow,
+} from "@/lib/central-http";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -367,6 +371,125 @@ function WagooPromoLinksPanel() {
   );
 }
 
+function providerLabel(provider: CentralPaymentHttpRow["provider"]) {
+  if (provider === "mercadopago") return "Mercado Pago";
+  if (provider === "stripe") return "Stripe";
+  return "—";
+}
+
+function formatMoney(cents: number | null, currency: string | null) {
+  if (cents == null) return "—";
+  const code = (currency || "BRL").toUpperCase();
+  try {
+    return (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: code,
+    });
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${code}`;
+  }
+}
+
+function WagooPaymentsPanel() {
+  const [items, setItems] = useState<CentralPaymentHttpRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setMessage("");
+    try {
+      setItems(await fetchRecentPaymentsHttp({ product: "wagoo", limit: 40 }));
+    } catch (e) {
+      setItems([]);
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const t = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  return (
+    <div className="rounded border border-border/80 bg-card/40 p-4 font-mono text-xs">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground">
+            Pagamentos · Stripe + Mercado Pago
+          </h2>
+          <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+            Sinais, clube e assinaturas ingeridos no control plane Korven.
+            Também geram notificações no sino do topo.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 font-mono text-[10px]"
+          onClick={() => void load()}
+          disabled={loading}
+        >
+          Atualizar
+        </Button>
+      </div>
+
+      {message ? (
+        <p className="mt-3 text-[11px] text-destructive">{message}</p>
+      ) : null}
+
+      <div className="mt-4 max-h-72 overflow-auto rounded border border-border/60">
+        <table className="w-full border-collapse text-left text-[11px]">
+          <thead className="sticky top-0 bg-muted/80">
+            <tr>
+              <th className="p-2 font-medium">Quando</th>
+              <th className="p-2 font-medium">Provedor</th>
+              <th className="p-2 font-medium">Status</th>
+              <th className="p-2 font-medium">Valor</th>
+              <th className="p-2 font-medium">Tipo</th>
+              <th className="p-2 font-medium">ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => (
+              <tr key={row.id} className="border-t border-border/50">
+                <td className="p-2 align-top whitespace-nowrap">
+                  {new Date(row.created_at).toLocaleString("pt-BR")}
+                </td>
+                <td className="p-2 align-top">{providerLabel(row.provider)}</td>
+                <td className="p-2 align-top">
+                  {row.status ?? row.event_type ?? "—"}
+                </td>
+                <td className="p-2 align-top">
+                  {formatMoney(row.amount_cents, row.currency)}
+                </td>
+                <td className="p-2 align-top">
+                  {row.kind || row.plan || "—"}
+                </td>
+                <td className="p-2 align-top break-all max-w-[180px]">
+                  {row.object_id ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {!items.length && !loading ? (
+              <tr>
+                <td colSpan={6} className="p-3 text-muted-foreground">
+                  Nenhum pagamento no central ainda (Stripe legado ou Mercado
+                  Pago após o primeiro webhook).
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function WagooPage() {
   const { dashboard } = useKorvenDashboard();
 
@@ -404,14 +527,14 @@ function WagooPage() {
           Wagoo
         </h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          Visão de produto: KPIs e receita vêm do agregador Korven. Links de
-          cortesia e admin de usuários são carregados do Supabase central
-          (`/api/dashboard/central/users`). Promo links ainda passam pelo
-          backend Wagoo.
+          Visão de produto: KPIs, receita, eventos operacionais e pagamentos
+          (Stripe SaaS + Mercado Pago sinais). Notificações no sino do topo
+          espelham o control plane.
         </p>
       </div>
 
       <WagooPromoLinksPanel />
+      <WagooPaymentsPanel />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {kpis.map((k) => (
           <KpiCard key={k.label} {...k} />

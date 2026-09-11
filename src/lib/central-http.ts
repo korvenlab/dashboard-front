@@ -122,6 +122,29 @@ export async function fetchNotificationsHttp(
   return centralFetch(`/api/dashboard/central/notifications${q}`);
 }
 
+export type CentralPaymentHttpRow = {
+  id: string;
+  provider: "mercadopago" | "stripe" | "unknown";
+  event_type: string | null;
+  status: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  plan: string | null;
+  kind: string | null;
+  object_id: string | null;
+  created_at: string;
+};
+
+export async function fetchRecentPaymentsHttp(input?: {
+  product?: "wagoo" | "2avendas";
+  limit?: number;
+}): Promise<CentralPaymentHttpRow[]> {
+  const params = new URLSearchParams();
+  if (input?.product) params.set("product", input.product);
+  params.set("limit", String(input?.limit ?? 40));
+  return centralFetch(`/api/dashboard/central/payments?${params.toString()}`);
+}
+
 export async function mutateNotificationHttp(input: {
   id: string;
   action: "read" | "archive";
