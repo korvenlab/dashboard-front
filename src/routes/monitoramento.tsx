@@ -96,9 +96,12 @@ function MonitoringPage() {
       try {
         const result = (await fetchUptimeMonitoring({
           data: { force_refresh: false, full: false },
-        })) as UptimeMonitoringResponse;
+        })) as UptimeMonitoringResponse | null | undefined;
         if (cancelled) return;
-        if (result.skipped) {
+        if (!result) {
+          setError("UptimeRobot: resposta vazia do servidor");
+          setData(null);
+        } else if (result.skipped) {
           setUptimeSkipped(true);
           setData(null);
           setError("");

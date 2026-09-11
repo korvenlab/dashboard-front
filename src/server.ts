@@ -115,7 +115,34 @@ async function normalizeCatastrophicSsrResponse(
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Nitro/Vercel/CF podem entregar secrets no 2º arg `env` em vez de (ou além de)
+    // process.env. Espelha para cloudflare.env (lido por envGet) e completa process.env.
+    if (env && typeof env === "object" && !Array.isArray(env)) {
+      const bindings = env as Record<string, unknown>;
+      const asStrings: Record<string, string | undefined> = {};
+      for (const [key, value] of Object.entries(bindings)) {
+        if (typeof value === "string") asStrings[key] = value;
+      }
+      const g = globalThis as typeof globalThis & {
+        cloudflare?: { env?: Record<string, string | undefined> };
+      };
+      g.cloudflare = { env: { ...(g.cloudflare?.env ?? {}), ...asStrings } };
+      if (typeof process !== "undefined" && process.env) {
+        for (const [key, value] of Object.entries(asStrings)) {
+          if (value && !process.env[key]) process.env[key] = value;
+        }
+      }
+    }
+
     try {
+      if (new URL(request.url).pathname === "/api/dashboard/env-diag") {
+        const { handleDashboardEnvDiagApi } = await import(
+          "./lib/dashboard-env-diag.api"
+        );
+        const diag = await handleDashboardEnvDiagApi(request);
+        if (diag) return withSecurityHeaders(diag);
+      }
+
       const authResponse = await handleDashboardAuthApi(request);
       if (authResponse) return withSecurityHeaders(authResponse);
 

@@ -12,13 +12,15 @@ function assertAdminEnv(url: string, key: string) {
       "SUPABASE_URL inválida: use somente https://PROJECT_REF.supabase.co.",
     );
   }
-  if (!key.startsWith("eyJ")) {
+  // Aceita JWT legado (eyJ…) e secret key moderna (sb_secret_…).
+  if (!key.startsWith("eyJ") && !key.startsWith("sb_secret_")) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY inválida: use a chave JWT legada service_role, iniciada por eyJ.",
+      "SUPABASE_SERVICE_ROLE_KEY inválida: use JWT service_role (eyJ…) ou secret key (sb_secret_…).",
     );
   }
   const diag = describeSupabaseEnv();
-  if (diag.urlMatchesKey === false) {
+  // Só valida ref cruzada quando a key é JWT (sb_secret_ não carrega ref no token).
+  if (key.startsWith("eyJ") && diag.urlMatchesKey === false) {
     throw new Error(
       `SUPABASE_SERVICE_ROLE_KEY é de outro projeto (ref=${diag.serviceRoleRef}). A URL aponta para ${diag.urlRef}.`,
     );
