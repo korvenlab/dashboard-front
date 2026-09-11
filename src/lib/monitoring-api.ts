@@ -1,7 +1,7 @@
 import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
 import { listMpCentralMonitoring } from "@/lib/central-service";
-import { getDashboardBackendEnv, getWagooServerEnv } from "@/lib/server-env";
+import { getDashboardBackendEnv } from "@/lib/server-env";
 
 type UptimeMonitor = {
   id: number | string | null;
@@ -34,13 +34,14 @@ export type MpWebhookMonitorEvent = {
   live_mode: boolean | null;
   processed_at: string;
   kind?: string | null;
-  source?: "upstream" | "ingest" | "notification";
+  source?: "ingest" | "notification";
 };
 
 export type MpWebhookMonitorResponse = {
   ok: boolean;
   fetchedAt: string;
-  source: "upstream" | "central" | "merged";
+  /** Sempre control plane Supabase no Korven. */
+  source: "supabase";
   summary: {
     last_24h_total: number;
     by_topic_24h: Record<string, number>;
@@ -81,7 +82,11 @@ export const fetchUptimeMonitoring = protectedServerFn("GET")
     const env = getDashboardBackendEnv();
     const base = env.apiBaseUrl?.trim();
     const key = env.metricsApiKey?.trim();
-    if (!base) throw new Error("Monitoramento UptimeRobot indisponível (DASHBOARD_BACKEND_BASE_URL).");
+    if (!base) {
+      throw new Error(
+        "UptimeRobot indisponível (DASHBOARD_BACKEND_BASE_URL ausente). O bloco Mercado Pago usa só Supabase.",
+      );
+    }
 
     const url = new URL(`${base.replace(/\/+$/, "")}/monitoring/uptimerobot`);
     if (data.force_refresh) url.searchParams.set("refresh", "1");
@@ -102,7 +107,7 @@ export const fetchUptimeMonitoring = protectedServerFn("GET")
       const message =
         typeof root.message === "string"
           ? root.message
-          : `Falha ao carregar monitoramento (HTTP ${res.status})`;
+          : `Falha ao carregar UptimeRobot (HTTP ${res.status})`;
       throw new Error(message);
     }
 
@@ -133,108 +138,24 @@ export const fetchUptimeMonitoring = protectedServerFn("GET")
     };
   }) as any);
 
-async function tryFetchUpstreamMpWebhooks(
-  limit: number,
-): Promise<MpWebhookMonitorResponse | null> {
-  const env = getWagooServerEnv();
-  const base = env.apiBaseUrl?.trim();
-  const key = env.metricsApiKey?.trim();
-  if (!base || !key) return null;
-
-  try {
-    const url = new URL(`${base.replace(/\/+$/, "")}/api/admin/mercadopago/webhooks`);
-    url.searchParams.set("limit", String(limit));
-    const res = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${key}`,
-        "X-API-Key": key,
-      },
-    });
-    const text = await res.text();
-    const json = text ? (JSON.parse(text) as unknown) : {};
-    const root = asRecord(json);
-    if (!res.ok || root.ok === false) return null;
-
-    const summaryRaw = asRecord(root.summary);
-    const byTopicRaw = asRecord(summaryRaw.by_topic_24h);
-    const byTopic: Record<string, number> = {};
-    for (const [k, v] of Object.entries(byTopicRaw)) {
-      if (typeof v === "number") byTopic[k] = v;
-    }
-
-    return {
-      ok: true,
-      fetchedAt:
-        typeof root.fetchedAt === "string" ? root.fetchedAt : new Date().toISOString(),
-      source: "upstream",
-      summary: {
-        last_24h_total:
-          typeof summaryRaw.last_24h_total === "number" ? summaryRaw.last_24h_total : 0,
-        by_topic_24h: byTopic,
-        last_received_at:
-          typeof summaryRaw.last_received_at === "string"
-            ? summaryRaw.last_received_at
-            : null,
-        last_received_age_sec:
-          typeof summaryRaw.last_received_age_sec === "number"
-            ? summaryRaw.last_received_age_sec
-            : null,
-        healthy:
-          typeof summaryRaw.healthy === "boolean" ? summaryRaw.healthy : null,
-      },
-      events: asArray(root.events).map((item) => {
-        const r = asRecord(item);
-        return {
-          id: (r.id as number | string) ?? "—",
-          topic: typeof r.topic === "string" ? r.topic : "unknown",
-          data_id: typeof r.data_id === "string" ? r.data_id : String(r.data_id ?? ""),
-          action: typeof r.action === "string" ? r.action : null,
-          live_mode: typeof r.live_mode === "boolean" ? r.live_mode : null,
-          processed_at:
-            typeof r.processed_at === "string" ? r.processed_at : new Date(0).toISOString(),
-          source: "upstream" as const,
-        };
-      }),
-      runtime_signals: asArray(root.runtime_signals).map((item) => {
-        const r = asRecord(item);
-        return {
-          id: typeof r.id === "string" ? r.id : String(r.id ?? ""),
-          status: typeof r.status === "string" ? r.status : "online",
-          message: typeof r.message === "string" ? r.message : "",
-          timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
-        };
-      }),
-    };
-  } catch {
-    return null;
-  }
-}
-
 const mpWebhookQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
 /**
- * Preferência: webhooks crus no wag-backend.
- * Fallback: eventos MP já ingeridos no Supabase central (sempre disponível no Korven).
+ * Monitoramento MP no Korven = só Supabase central (payment_events + notifications).
+ * O dashboard.korvenlab.com não depende de Render nem de WAGOO_API_BASE_URL aqui.
  */
 export const fetchMpWebhookMonitoring = protectedServerFn("GET")
   .inputValidator(mpWebhookQuerySchema)
   .handler((async (ctx: unknown): Promise<MpWebhookMonitorResponse> => {
     const { data } = ctx as { data: z.infer<typeof mpWebhookQuerySchema> };
     const limit = data.limit ?? 40;
-
-    const upstream = await tryFetchUpstreamMpWebhooks(limit);
-    if (upstream && upstream.events.length > 0) {
-      return upstream;
-    }
-
     const central = await listMpCentralMonitoring(limit);
     return {
       ok: true,
       fetchedAt: new Date().toISOString(),
-      source: upstream ? "merged" : "central",
+      source: "supabase",
       summary: central.summary,
       events: central.events.map((e) => ({
         id: e.id,

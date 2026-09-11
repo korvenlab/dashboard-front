@@ -81,12 +81,11 @@ function readEnvPair(keys: { url: string; key: string }): MetricsApiEnv {
 
 export function getWagooServerEnv(): WagooServerEnv {
   return {
+    // Produto Wagoo (wag-backend) — admin/reconcile. O /monitoramento MP usa só Supabase.
     apiBaseUrl: firstNonEmptyTrimmed(
       envGet("WAGOO_API_BASE_URL"),
       envGet("WAGOO_BACKEND_URL"),
       envGet("WAG_BACKEND_URL"),
-      // URL pública conhecida do wag-backend (Render) — fallback se a env não chegar ao runtime Nitro.
-      "https://wag-backend.onrender.com",
     ),
     metricsApiKey: firstNonEmptyTrimmed(
       envGet("WAGOO_METRICS_API_KEY"),

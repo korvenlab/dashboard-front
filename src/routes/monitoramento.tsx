@@ -132,13 +132,8 @@ function MonitoringPage() {
             Mercado Pago · webhooks
           </h2>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            Pipeline de ingestão no Korven
-            {mpData?.source === "upstream"
-              ? " · fonte: wag-backend (eventos crus)"
-              : mpData
-                ? " · fonte: control plane (ingest)"
-                : ""}
-            . Extrato financeiro fica em /wagoo.
+            Fonte: Supabase central (ingest Edge + payment_events / notifications).
+            Extrato financeiro fica em /wagoo.
           </p>
         </div>
 

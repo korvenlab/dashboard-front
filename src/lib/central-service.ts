@@ -459,23 +459,92 @@ export async function listMpCentralMonitoring(limit = 40): Promise<{
     timestamp: string;
   }[];
 }> {
-  const [payments, notifications] = await Promise.all([
+  const [payments, notifications, activityRes] = await Promise.all([
     listRecentPayments({ product: "wagoo", limit: Math.min(100, limit * 2) }),
     listNotifications(true),
+    getSupabaseServerClient({ admin: true })
+      .from("user_activity_events")
+      .select("id,event_type,event_id,occurred_at,payload,created_at")
+      .in("event_type", [
+        "payment.succeeded",
+        "payment.failed",
+        "admin.event",
+      ])
+      .order("occurred_at", { ascending: false })
+      .limit(Math.min(100, limit * 2)),
   ]);
+  throwSupabase(activityRes.error, "Falha ao consultar activity events MP");
+
+  const activityRows = rows(activityRes.data);
+  const mpActivity = activityRows.filter((row) => {
+    const payload = row.payload;
+    const nested =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Row)
+        : {};
+    const inner =
+      nested.payload &&
+      typeof nested.payload === "object" &&
+      !Array.isArray(nested.payload)
+        ? (nested.payload as Row)
+        : nested;
+    if (inner.provider === "mercadopago") return true;
+    if (typeof inner.mercadopago_payment_id === "string") return true;
+    const msg = str(inner.message) ?? str(nested.message) ?? "";
+    return /MP webhook|Mercado Pago|mercadopago/i.test(msg);
+  });
 
   const mpPayments = payments.filter((p) => p.provider === "mercadopago");
-  const events: MpCentralMonitorEvent[] = mpPayments.slice(0, limit).map((p) => ({
-    id: p.id,
-    source: "ingest" as const,
-    topic: p.event_type || "payment",
-    data_id: p.object_id || p.id,
-    action: p.status,
-    live_mode: null,
-    processed_at: p.created_at,
-    status: p.status,
-    kind: p.kind,
-  }));
+  const events: MpCentralMonitorEvent[] = [
+    ...mpPayments.map((p) => ({
+      id: p.id,
+      source: "ingest" as const,
+      topic: p.event_type || "payment",
+      data_id: p.object_id || p.id,
+      action: p.status,
+      live_mode: null,
+      processed_at: p.created_at,
+      status: p.status,
+      kind: p.kind,
+    })),
+    ...mpActivity.map((row) => {
+      const payload = row.payload;
+      const nested =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? (payload as Row)
+          : {};
+      const inner =
+        nested.payload &&
+        typeof nested.payload === "object" &&
+        !Array.isArray(nested.payload)
+          ? (nested.payload as Row)
+          : nested;
+      return {
+        id: str(row.id) ?? crypto.randomUUID(),
+        source: "ingest" as const,
+        topic: str(row.event_type) || "activity",
+        data_id:
+          str(row.event_id) ||
+          str(inner.mercadopago_payment_id) ||
+          str(row.id) ||
+          "",
+        action: str(inner.mercadopago_status) ?? str(inner.status),
+        live_mode:
+          typeof inner.livemode === "boolean" ? inner.livemode : null,
+        processed_at:
+          str(row.occurred_at) ??
+          str(row.created_at) ??
+          new Date().toISOString(),
+        status: str(inner.mercadopago_status) ?? str(inner.status),
+        kind: str(inner.kind) ?? str((inner.metadata as Row | undefined)?.kind),
+      };
+    }),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.processed_at).getTime() - new Date(a.processed_at).getTime(),
+    )
+    .slice(0, limit);
 
   const mpNotifs = notifications.filter((n) =>
     /mercado\s*pago|mercadopago|\bmp\b.*webhook|webhook.*\bmp\b/i.test(
