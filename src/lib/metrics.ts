@@ -49,7 +49,7 @@ const MOCK: MetricsResponse = {
   ],
 };
 
-/** @deprecated Dados mock — use `fetchKorvenDashboard` (Stripe, somente ao pressionar Atualizar). */
+/** @deprecated Dados mock — use `fetchDashboardMetrics` (HTTP auto-load). */
 export async function fetchMetrics(_signal?: AbortSignal): Promise<MetricsResponse> {
   return MOCK;
 }

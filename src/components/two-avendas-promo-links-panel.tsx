@@ -129,16 +129,6 @@ export function TwoAvendasPromoLinksPanel() {
             recebe o tempo de acesso gratuito escolhido (sem Stripe), enquanto o código estiver válido.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 font-mono text-[10px]"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          Atualizar lista
-        </Button>
       </div>
 
       <div className="mt-4 space-y-4 border-t border-border/60 pt-4">

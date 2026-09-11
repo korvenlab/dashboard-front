@@ -18,7 +18,7 @@ type FetchDashboardInputCtx = { data: DashboardQueryInput };
 
 /**
  * Métricas Korven (Wagoo + 2AVENDAS) direto da Stripe — backend integrado ao dashboard-front.
- * Chamado somente ao clicar em Atualizar no topbar.
+ * Fallback legado; o fluxo principal é HTTP `/api/dashboard/metrics` no mount.
  */
 export const fetchKorvenDashboard = protectedServerFn("GET")
   .inputValidator(dashboardQuerySchema)

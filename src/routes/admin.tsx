@@ -238,17 +238,6 @@ function AdminPage() {
             />
             Sincronizar
           </Button>
-          <Button
-            variant="outline"
-            className="rounded-none font-mono text-xs"
-            disabled={loading}
-            onClick={() => void load(page.page)}
-          >
-            <RefreshCw
-              className={`mr-2 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-            />
-            Atualizar
-          </Button>
         </div>
       </header>
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Bell, Check, RefreshCw } from "lucide-react";
+import { Archive, Bell, Check } from "lucide-react";
 import {
   fetchNotificationsHttp,
   fetchSupabasePublicConfigHttp,
@@ -113,20 +113,11 @@ export function NotificationCenter() {
               Notificações
             </p>
             <p className="font-mono text-[10px] text-muted-foreground">
-              {unread} não lidas · atualização contínua
+              {loading
+                ? "Carregando…"
+                : `${unread} não lidas · atualização contínua`}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-            />
-          </Button>
         </div>
         <div className="max-h-[430px] overflow-y-auto">
           {error ? (

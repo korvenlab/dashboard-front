@@ -17,7 +17,7 @@ type KorvenDashboardContextValue = {
   loading: boolean;
   error: string | null;
   loadedOnce: boolean;
-  /** Busca a RPC central; usa Stripe somente como fallback legado. */
+  /** Busca métricas (login, F5, mudança de filtro). */
   refresh: () => Promise<void>;
 };
 
@@ -139,9 +139,8 @@ export function KorvenDashboardEmptyHint({
     >
       <p className="text-foreground">Nenhum dado carregado ainda.</p>
       <p className="mt-2 text-xs leading-relaxed">
-        Use o botão <strong className="text-primary">Atualizar</strong> na barra
-        superior para buscar métricas na RPC central. Alterar produto ou período
-        também exige um novo clique em Atualizar.
+        Os dados carregam automaticamente ao entrar e ao mudar produto ou
+        período. Se continuar vazio, use F5 ou verifique a sessão.
       </p>
       {loading ? (
         <p className="mt-4 text-xs text-primary">Carregando…</p>
