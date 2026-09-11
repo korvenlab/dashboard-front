@@ -4,6 +4,7 @@ import { handleDashboardAuthApi } from "./lib/dashboard-auth.api";
 import { handleDashboardAdminApi } from "./lib/dashboard-admin.api";
 import { handleDashboardCentralApi } from "./lib/dashboard-central.api";
 import { handleDashboardMetricsApi } from "./lib/dashboard-metrics.api";
+import { handleDashboardMonitoringApi } from "./lib/dashboard-monitoring.api";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -151,6 +152,9 @@ export default {
 
       const metricsResponse = await handleDashboardMetricsApi(request);
       if (metricsResponse) return withSecurityHeaders(metricsResponse);
+
+      const monitoringResponse = await handleDashboardMonitoringApi(request);
+      if (monitoringResponse) return withSecurityHeaders(monitoringResponse);
 
       const adminResponse = await handleDashboardAdminApi(request);
       if (adminResponse) return withSecurityHeaders(adminResponse);

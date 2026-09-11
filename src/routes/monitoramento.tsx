@@ -1,11 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   fetchMpWebhookMonitoring,
   fetchUptimeMonitoring,
   type MpWebhookMonitorResponse,
   type UptimeMonitoringResponse,
-} from "@/lib/monitoring-api";
+} from "@/lib/monitoring-http";
 
 export const Route = createFileRoute("/monitoramento")({
   component: MonitoringPage,
@@ -75,9 +75,7 @@ function MonitoringPage() {
       setMpLoading(true);
       setMpError("");
       try {
-        const result = (await fetchMpWebhookMonitoring({
-          data: { limit: 40 },
-        })) as MpWebhookMonitorResponse;
+        const result = await fetchMpWebhookMonitoring({ limit: 40 });
         if (!cancelled) setMpData(result);
       } catch (e) {
         if (!cancelled) {
@@ -94,14 +92,9 @@ function MonitoringPage() {
       setError("");
       setUptimeSkipped(false);
       try {
-        const result = (await fetchUptimeMonitoring({
-          data: { force_refresh: false, full: false },
-        })) as UptimeMonitoringResponse | null | undefined;
+        const result = await fetchUptimeMonitoring();
         if (cancelled) return;
-        if (!result) {
-          setError("UptimeRobot: resposta vazia do servidor");
-          setData(null);
-        } else if (result.skipped) {
+        if (result.skipped) {
           setUptimeSkipped(true);
           setData(null);
           setError("");
@@ -134,8 +127,7 @@ function MonitoringPage() {
           Monitoramento
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Atualiza ao abrir · Mercado Pago via Supabase · UptimeRobot opcional (API
-          direta).
+          Atualiza ao abrir · Mercado Pago via Supabase · UptimeRobot opcional.
         </p>
       </div>
 
@@ -286,7 +278,7 @@ function MonitoringPage() {
             UptimeRobot
           </h2>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            Opcional · usa UPTIMEROBOT_API_KEY no ambiente Vercel (sem backend Render).
+            Opcional · usa UPTIMEROBOT_API_KEY no ambiente Vercel.
           </p>
         </div>
 
