@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   fetchMpWebhookMonitoring,
@@ -12,8 +12,10 @@ export const Route = createFileRoute("/monitoramento")({
 });
 
 function statusClass(status: string): string {
-  if (status.toLowerCase() === "online") return "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
-  if (status.toLowerCase() === "offline") return "border-rose-500/50 bg-rose-500/10 text-rose-300";
+  if (status.toLowerCase() === "online")
+    return "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  if (status.toLowerCase() === "offline")
+    return "border-rose-500/50 bg-rose-500/10 text-rose-300";
   return "border-amber-500/50 bg-amber-500/10 text-amber-300";
 }
 
@@ -57,52 +59,57 @@ function latestResponseMs(responseTimes: unknown[]): number | null {
 }
 
 function MonitoringPage() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<UptimeMonitoringResponse | null>(null);
-  const [loadedOnce, setLoadedOnce] = useState(false);
 
-  const [mpLoading, setMpLoading] = useState(false);
+  const [mpLoading, setMpLoading] = useState(true);
   const [mpError, setMpError] = useState("");
   const [mpData, setMpData] = useState<MpWebhookMonitorResponse | null>(null);
-  const [mpLoadedOnce, setMpLoadedOnce] = useState(false);
 
-  const load = async (opts?: { force_refresh?: boolean; full?: boolean }) => {
-    setLoading(true);
-    setError("");
-    try {
-      const result = (await fetchUptimeMonitoring({
-        data: {
-          force_refresh: opts?.force_refresh,
-          full: opts?.full,
-        },
-      })) as UptimeMonitoringResponse;
-      setData(result);
-      setLoadedOnce(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
 
-  const loadMp = async () => {
-    setMpLoading(true);
-    setMpError("");
-    try {
-      const result = (await fetchMpWebhookMonitoring({
-        data: { limit: 40 },
-      })) as MpWebhookMonitorResponse;
-      setMpData(result);
-      setMpLoadedOnce(true);
-    } catch (e) {
-      setMpError(e instanceof Error ? e.message : String(e));
-      setMpData(null);
-    } finally {
-      setMpLoading(false);
-    }
-  };
+    void (async () => {
+      setMpLoading(true);
+      setMpError("");
+      try {
+        const result = (await fetchMpWebhookMonitoring({
+          data: { limit: 40 },
+        })) as MpWebhookMonitorResponse;
+        if (!cancelled) setMpData(result);
+      } catch (e) {
+        if (!cancelled) {
+          setMpError(e instanceof Error ? e.message : String(e));
+          setMpData(null);
+        }
+      } finally {
+        if (!cancelled) setMpLoading(false);
+      }
+    })();
+
+    void (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const result = (await fetchUptimeMonitoring({
+          data: { force_refresh: false, full: false },
+        })) as UptimeMonitoringResponse;
+        if (!cancelled) setData(result);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setData(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const topicEntries = mpData
     ? Object.entries(mpData.summary.by_topic_24h).sort((a, b) => b[1] - a[1])
@@ -110,48 +117,39 @@ function MonitoringPage() {
 
   return (
     <div className="space-y-8 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">Monitoramento</h1>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            UptimeRobot + saúde dos webhooks Mercado Pago (Wagoo). Sem extrato financeiro — só ops.
-          </p>
-        </div>
+      <div>
+        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">
+          Monitoramento
+        </h1>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">
+          Atualiza ao abrir a página · webhooks Mercado Pago + UptimeRobot (só ops).
+        </p>
       </div>
 
-      {/* —— Mercado Pago webhooks —— */}
       <section className="space-y-4 rounded border border-border bg-card/20 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.15em]">
-              Mercado Pago · webhooks
-            </h2>
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              Eventos recebidos em{" "}
-              <code className="text-[10px]">/api/mercadopago/webhook</code> (tópico, id, live/test).
-              Pagamentos e clube ficam em /wagoo.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadMp()}
-            className="rounded border border-border px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:bg-card"
-            disabled={mpLoading}
-          >
-            {mpLoading ? "Carregando..." : mpLoadedOnce ? "Recarregar MP" : "Carregar MP"}
-          </button>
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.15em]">
+            Mercado Pago · webhooks
+          </h2>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            Pipeline de ingestão no Korven
+            {mpData?.source === "upstream"
+              ? " · fonte: wag-backend (eventos crus)"
+              : mpData
+                ? " · fonte: control plane (ingest)"
+                : ""}
+            . Extrato financeiro fica em /wagoo.
+          </p>
         </div>
+
+        {mpLoading ? (
+          <p className="font-mono text-xs text-muted-foreground">Carregando webhooks MP…</p>
+        ) : null}
 
         {mpError ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-300">
             {mpError}
           </div>
-        ) : null}
-
-        {!mpLoadedOnce && !mpLoading ? (
-          <p className="font-mono text-xs text-muted-foreground">
-            Clique em Carregar MP para ver os últimos webhooks.
-          </p>
         ) : null}
 
         {mpData ? (
@@ -165,7 +163,7 @@ function MonitoringPage() {
               </div>
               <div className="rounded border border-border bg-card/40 p-3">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Último webhook
+                  Último evento
                 </div>
                 <div className="mt-1 font-mono text-sm">
                   {mpData.summary.last_received_at
@@ -197,7 +195,10 @@ function MonitoringPage() {
                     <span className="font-mono text-xs text-muted-foreground">Nenhum</span>
                   ) : (
                     topicEntries.slice(0, 6).map(([topic, n]) => (
-                      <div key={topic} className="flex justify-between gap-2 font-mono text-[11px]">
+                      <div
+                        key={topic}
+                        className="flex justify-between gap-2 font-mono text-[11px]"
+                      >
                         <span className="truncate text-muted-foreground">{topic}</span>
                         <span>{n}</span>
                       </div>
@@ -218,13 +219,13 @@ function MonitoringPage() {
                       Tópico
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      Data ID
+                      ID
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      Action
+                      Status / action
                     </th>
                     <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
-                      Modo
+                      Kind
                     </th>
                   </tr>
                 </thead>
@@ -238,7 +239,12 @@ function MonitoringPage() {
                       <td className="px-3 py-2 font-mono text-xs">{e.data_id}</td>
                       <td className="px-3 py-2 font-mono text-xs">{e.action ?? "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs">
-                        {e.live_mode === true ? "live" : e.live_mode === false ? "test" : "—"}
+                        {e.kind ??
+                          (e.live_mode === true
+                            ? "live"
+                            : e.live_mode === false
+                              ? "test"
+                              : "—")}
                       </td>
                     </tr>
                   ))}
@@ -248,7 +254,8 @@ function MonitoringPage() {
                         colSpan={5}
                         className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
                       >
-                        Nenhum webhook registrado ainda.
+                        Nenhum evento MP no control plane ainda. Após um pagamento/webhook,
+                        aparece aqui.
                       </td>
                     </tr>
                   ) : null}
@@ -259,7 +266,7 @@ function MonitoringPage() {
             {mpData.runtime_signals.length > 0 ? (
               <div className="space-y-2">
                 <h3 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Sinais runtime (processo)
+                  Sinais / notificações MP
                 </h3>
                 <ul className="space-y-1">
                   {mpData.runtime_signals.map((s) => (
@@ -271,9 +278,7 @@ function MonitoringPage() {
                         {s.status}
                       </span>
                       <span className="text-muted-foreground">
-                        {s.timestamp
-                          ? new Date(s.timestamp).toLocaleString("pt-BR")
-                          : ""}
+                        {s.timestamp ? new Date(s.timestamp).toLocaleString("pt-BR") : ""}
                       </span>
                       <span>{s.message}</span>
                     </li>
@@ -285,48 +290,24 @@ function MonitoringPage() {
         ) : null}
       </section>
 
-      {/* —— UptimeRobot —— */}
       <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.15em]">
-              UptimeRobot
-            </h2>
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              Cache ~10 min no servidor. Carregue só quando precisar.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void load({ force_refresh: false })}
-              className="rounded border border-border px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:bg-card"
-              disabled={loading}
-            >
-              {loading ? "Carregando..." : loadedOnce ? "Recarregar (cache)" : "Carregar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void load({ force_refresh: true, full: true })}
-              className="rounded border border-primary/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-primary hover:bg-primary/10"
-              disabled={loading}
-              title="Consulta completa UptimeRobot (logs e latência)"
-            >
-              Atualizar tudo
-            </button>
-          </div>
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.15em]">
+            UptimeRobot
+          </h2>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            Cache ~10 min no servidor.
+          </p>
         </div>
+
+        {loading ? (
+          <p className="font-mono text-xs text-muted-foreground">Carregando monitores…</p>
+        ) : null}
 
         {error ? (
           <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-300">
             {error}
           </div>
-        ) : null}
-
-        {!loadedOnce && !loading ? (
-          <p className="font-mono text-xs text-muted-foreground">
-            Clique em Carregar para ver os monitores. A página não busca dados automaticamente.
-          </p>
         ) : null}
 
         {data ? (
@@ -410,7 +391,7 @@ function MonitoringPage() {
                   </tr>
                 );
               })}
-              {!loading && loadedOnce && (!data || data.monitors.length === 0) ? (
+              {!loading && (!data || data.monitors.length === 0) && !error ? (
                 <tr>
                   <td
                     colSpan={8}

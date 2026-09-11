@@ -81,7 +81,13 @@ function readEnvPair(keys: { url: string; key: string }): MetricsApiEnv {
 
 export function getWagooServerEnv(): WagooServerEnv {
   return {
-    apiBaseUrl: envGet("WAGOO_API_BASE_URL"),
+    apiBaseUrl: firstNonEmptyTrimmed(
+      envGet("WAGOO_API_BASE_URL"),
+      envGet("WAGOO_BACKEND_URL"),
+      envGet("WAG_BACKEND_URL"),
+      // URL pública conhecida do wag-backend (Render) — fallback se a env não chegar ao runtime Nitro.
+      "https://wag-backend.onrender.com",
+    ),
     metricsApiKey: firstNonEmptyTrimmed(
       envGet("WAGOO_METRICS_API_KEY"),
       envGet("METRICS_API_KEY"),

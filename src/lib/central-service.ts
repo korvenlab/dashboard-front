@@ -430,6 +430,104 @@ export async function listNotifications(includeArchived = false) {
   })) satisfies Notification[];
 }
 
+/** Monitoramento MP via control plane (ingest) — sem depender de WAGOO_API_BASE_URL. */
+export type MpCentralMonitorEvent = {
+  id: string;
+  source: "ingest" | "notification";
+  topic: string;
+  data_id: string;
+  action: string | null;
+  live_mode: boolean | null;
+  processed_at: string;
+  status: string | null;
+  kind: string | null;
+};
+
+export async function listMpCentralMonitoring(limit = 40): Promise<{
+  events: MpCentralMonitorEvent[];
+  summary: {
+    last_24h_total: number;
+    by_topic_24h: Record<string, number>;
+    last_received_at: string | null;
+    last_received_age_sec: number | null;
+    healthy: boolean | null;
+  };
+  runtime_signals: {
+    id: string;
+    status: string;
+    message: string;
+    timestamp: string;
+  }[];
+}> {
+  const [payments, notifications] = await Promise.all([
+    listRecentPayments({ product: "wagoo", limit: Math.min(100, limit * 2) }),
+    listNotifications(true),
+  ]);
+
+  const mpPayments = payments.filter((p) => p.provider === "mercadopago");
+  const events: MpCentralMonitorEvent[] = mpPayments.slice(0, limit).map((p) => ({
+    id: p.id,
+    source: "ingest" as const,
+    topic: p.event_type || "payment",
+    data_id: p.object_id || p.id,
+    action: p.status,
+    live_mode: null,
+    processed_at: p.created_at,
+    status: p.status,
+    kind: p.kind,
+  }));
+
+  const mpNotifs = notifications.filter((n) =>
+    /mercado\s*pago|mercadopago|\bmp\b.*webhook|webhook.*\bmp\b/i.test(
+      `${n.title} ${n.message ?? ""}`,
+    ),
+  );
+
+  const runtime_signals = mpNotifs.slice(0, 30).map((n) => ({
+    id: n.id,
+    status:
+      n.level === "error" || n.level === "critical"
+        ? "offline"
+        : n.level === "warning"
+          ? "degraded"
+          : "online",
+    message: [n.title, n.message].filter(Boolean).join(" · "),
+    timestamp: n.created_at,
+  }));
+
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const last24 = events.filter(
+    (e) => new Date(e.processed_at).getTime() >= since,
+  );
+  const byTopic: Record<string, number> = {};
+  for (const e of last24) {
+    byTopic[e.topic] = (byTopic[e.topic] || 0) + 1;
+  }
+  const lastAt = events[0]?.processed_at ?? null;
+  const ageSec = lastAt
+    ? Math.max(0, Math.round((Date.now() - new Date(lastAt).getTime()) / 1000))
+    : null;
+
+  return {
+    events,
+    summary: {
+      last_24h_total: last24.length,
+      by_topic_24h: byTopic,
+      last_received_at: lastAt,
+      last_received_age_sec: ageSec,
+      healthy:
+        ageSec == null
+          ? null
+          : ageSec < 6 * 60 * 60
+            ? true
+            : ageSec < 48 * 60 * 60
+              ? null
+              : false,
+    },
+    runtime_signals,
+  };
+}
+
 export async function mutateNotificationService(input: {
   id: string;
   action: "read" | "archive";
