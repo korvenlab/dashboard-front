@@ -123,6 +123,8 @@ export function getCentralHealth() {
       notifications: "GET /api/dashboard/central/notifications",
       notificationMutate: "POST /api/dashboard/central/notifications",
       payments: "GET /api/dashboard/central/payments",
+      mpMonitoring: "GET /api/dashboard/central/mp-monitoring",
+      uptime: "GET /api/dashboard/central/uptime",
       publicConfig: "GET /api/dashboard/central/public-config",
       metrics: "GET /api/dashboard/metrics",
     },

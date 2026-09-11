@@ -145,6 +145,74 @@ export async function fetchRecentPaymentsHttp(input?: {
   return centralFetch(`/api/dashboard/central/payments?${params.toString()}`);
 }
 
+export type CentralMpMonitoringResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  source: "supabase";
+  summary: {
+    last_24h_total: number;
+    by_topic_24h: Record<string, number>;
+    last_received_at: string | null;
+    last_received_age_sec: number | null;
+    healthy: boolean | null;
+  };
+  events: {
+    id: number | string;
+    topic: string;
+    data_id: string;
+    action: string | null;
+    live_mode: boolean | null;
+    processed_at: string;
+    kind?: string | null;
+    source?: "ingest" | "notification";
+  }[];
+  runtime_signals: {
+    id: string;
+    status: string;
+    message: string;
+    timestamp: string;
+  }[];
+};
+
+export async function fetchCentralMpMonitoringHttp(options?: {
+  limit?: number;
+}): Promise<CentralMpMonitoringResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(options?.limit ?? 40));
+  return centralFetch(
+    `/api/dashboard/central/mp-monitoring?${params.toString()}`,
+  );
+}
+
+export type CentralUptimeMonitor = {
+  id: number | string | null;
+  name: string;
+  url: string | null;
+  statusCode: number;
+  status: string;
+  type: number | string | null;
+  interval: number | string | null;
+  uptimeRatio: string | number | null;
+  createDatetime: number | string | null;
+  logs: unknown[];
+  responseTimes: unknown[];
+};
+
+export type CentralUptimeResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  stat: string;
+  total: number;
+  monitors: CentralUptimeMonitor[];
+  raw: Record<string, unknown>;
+  skipped?: boolean;
+  message?: string;
+};
+
+export async function fetchCentralUptimeHttp(): Promise<CentralUptimeResponse> {
+  return centralFetch("/api/dashboard/central/uptime");
+}
+
 export async function mutateNotificationHttp(input: {
   id: string;
   action: "read" | "archive";

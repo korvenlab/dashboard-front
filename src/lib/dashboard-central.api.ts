@@ -3,6 +3,7 @@ import {
   getCentralHealth,
   getPublicSupabaseConfig,
   getUnifiedUserDetails,
+  listMpCentralMonitoring,
   listNotifications,
   listRecentPayments,
   listUnifiedUsers,
@@ -10,6 +11,7 @@ import {
   runCentralAdminCommand,
 } from "@/lib/central-service";
 import { reconcileCentralProducts } from "@/lib/central-reconcile";
+import { getUptimeRobotApiKey } from "@/lib/server-env";
 import { z } from "zod";
 import {
   isDashboardAuthConfigured,
@@ -71,6 +73,140 @@ const notificationMutationSchema = z.object({
   action: z.enum(["read", "archive"]),
 });
 
+const UPTIME_STATUS: Record<number, string> = {
+  0: "Paused",
+  1: "Not checked yet",
+  2: "Online",
+  8: "Seems down",
+  9: "Offline",
+};
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
+}
+
+function asArray(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+
+function asStringOrNumberOrNull(v: unknown): string | number | null {
+  return typeof v === "string" || typeof v === "number" ? v : null;
+}
+
+async function handleCentralMpMonitoring(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const limitRaw = Number(url.searchParams.get("limit") ?? "40");
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(100, Math.max(1, Math.trunc(limitRaw)))
+    : 40;
+
+  const central = await listMpCentralMonitoring(limit);
+  return jsonOk({
+    ok: true,
+    fetchedAt: new Date().toISOString(),
+    source: "supabase",
+    summary: central.summary,
+    events: central.events.map((e) => ({
+      id: e.id,
+      topic: e.topic,
+      data_id: e.data_id,
+      action: e.action,
+      live_mode: e.live_mode,
+      processed_at: e.processed_at,
+      kind: e.kind,
+      source: e.source,
+    })),
+    runtime_signals: central.runtime_signals,
+  });
+}
+
+async function handleCentralUptimeMonitoring(): Promise<Response> {
+  const apiKey = getUptimeRobotApiKey();
+  if (!apiKey) {
+    return jsonOk({
+      ok: true,
+      skipped: true,
+      message:
+        "UPTIMEROBOT_API_KEY ausente. O bloco Mercado Pago usa só Supabase.",
+      fetchedAt: new Date().toISOString(),
+      stat: "skipped",
+      total: 0,
+      monitors: [],
+      raw: {},
+    });
+  }
+
+  const body = new URLSearchParams({
+    api_key: apiKey,
+    format: "json",
+    logs: "1",
+    response_times: "1",
+    response_times_limit: "5",
+  });
+
+  const res = await fetch("https://api.uptimerobot.com/v2/getMonitors", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Cache-Control": "no-cache",
+    },
+    body,
+  });
+
+  const text = await res.text();
+  let json: unknown = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    return jsonError(
+      `UptimeRobot respondeu JSON inválido (HTTP ${res.status})`,
+      502,
+    );
+  }
+
+  const root = asRecord(json);
+  if (!res.ok || root.stat === "fail") {
+    const message =
+      typeof root.error === "object" && root.error
+        ? JSON.stringify(root.error)
+        : typeof root.message === "string"
+          ? root.message
+          : `Falha UptimeRobot (HTTP ${res.status})`;
+    return jsonError(message, 502);
+  }
+
+  const monitors = asArray(root.monitors).map((item) => {
+    const r = asRecord(item);
+    const statusCode = typeof r.status === "number" ? r.status : -1;
+    return {
+      id: asStringOrNumberOrNull(r.id),
+      name: typeof r.friendly_name === "string" ? r.friendly_name : "Sem nome",
+      url: typeof r.url === "string" ? r.url : null,
+      statusCode,
+      status: UPTIME_STATUS[statusCode] ?? String(statusCode),
+      type: asStringOrNumberOrNull(r.type),
+      interval: asStringOrNumberOrNull(r.interval),
+      uptimeRatio:
+        (r.all_time_uptime_ratio as string | number | null | undefined) ?? null,
+      createDatetime:
+        (r.create_datetime as string | number | null | undefined) ?? null,
+      logs: asArray(r.logs),
+      responseTimes: asArray(r.response_times),
+    };
+  });
+
+  return jsonOk({
+    ok: true,
+    fetchedAt: new Date().toISOString(),
+    stat: typeof root.stat === "string" ? root.stat : "ok",
+    total: monitors.length,
+    monitors,
+    raw: root,
+  });
+}
+
 /**
  * API HTTP do painel central — mesmo runtime Nitro de `/api/dashboard/metrics`.
  * Evita server functions do TanStack que podem não enxergar as envs de produção.
@@ -95,6 +231,20 @@ export async function handleDashboardCentralApi(
       request.method === "GET"
     ) {
       return jsonOk(getCentralHealth());
+    }
+
+    if (
+      pathname === "/api/dashboard/central/mp-monitoring" &&
+      request.method === "GET"
+    ) {
+      return await handleCentralMpMonitoring(request);
+    }
+
+    if (
+      pathname === "/api/dashboard/central/uptime" &&
+      request.method === "GET"
+    ) {
+      return await handleCentralUptimeMonitoring();
     }
 
     if (

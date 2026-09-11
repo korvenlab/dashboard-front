@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  fetchMpWebhookMonitoring,
-  fetchUptimeMonitoring,
-  type MpWebhookMonitorResponse,
-  type UptimeMonitoringResponse,
-} from "@/lib/monitoring-http";
+  fetchCentralMpMonitoringHttp,
+  fetchCentralUptimeHttp,
+  type CentralMpMonitoringResponse,
+  type CentralUptimeResponse,
+} from "@/lib/central-http";
 
 export const Route = createFileRoute("/monitoramento")({
   component: MonitoringPage,
@@ -61,12 +61,12 @@ function latestResponseMs(responseTimes: unknown[]): number | null {
 function MonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [data, setData] = useState<UptimeMonitoringResponse | null>(null);
+  const [data, setData] = useState<CentralUptimeResponse | null>(null);
   const [uptimeSkipped, setUptimeSkipped] = useState(false);
 
   const [mpLoading, setMpLoading] = useState(true);
   const [mpError, setMpError] = useState("");
-  const [mpData, setMpData] = useState<MpWebhookMonitorResponse | null>(null);
+  const [mpData, setMpData] = useState<CentralMpMonitoringResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +75,7 @@ function MonitoringPage() {
       setMpLoading(true);
       setMpError("");
       try {
-        const result = await fetchMpWebhookMonitoring({ limit: 40 });
+        const result = await fetchCentralMpMonitoringHttp({ limit: 40 });
         if (!cancelled) setMpData(result);
       } catch (e) {
         if (!cancelled) {
@@ -92,7 +92,7 @@ function MonitoringPage() {
       setError("");
       setUptimeSkipped(false);
       try {
-        const result = await fetchUptimeMonitoring();
+        const result = await fetchCentralUptimeHttp();
         if (cancelled) return;
         if (result.skipped) {
           setUptimeSkipped(true);
