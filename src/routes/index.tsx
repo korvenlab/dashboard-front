@@ -39,11 +39,7 @@ function Index() {
             Visão Geral
           </h1>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Métricas do Supabase central
-            {dashboard.meta.source !== "supabase"
-              ? ` · fonte atual: ${dashboard.meta.source}`
-              : ""}
-            . Listas de usuários ficam apenas em Admin.
+            KPIs e gráficos do período. Listas de usuários ficam em Admin.
           </p>
         </div>
       </div>

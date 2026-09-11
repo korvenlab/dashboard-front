@@ -127,7 +127,7 @@ function MonitoringPage() {
           Monitoramento
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Atualiza ao abrir · Mercado Pago via Supabase · UptimeRobot opcional.
+          Atualiza ao abrir · Mercado Pago · UptimeRobot opcional.
         </p>
       </div>
 
@@ -137,7 +137,6 @@ function MonitoringPage() {
             Mercado Pago · webhooks
           </h2>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            Fonte: Supabase central (ingest Edge + payment_events / notifications).
             Extrato financeiro fica em /wagoo.
           </p>
         </div>

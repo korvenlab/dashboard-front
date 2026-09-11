@@ -527,9 +527,8 @@ function WagooPage() {
           Wagoo
         </h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          Visão de produto: KPIs, receita, eventos e pagamentos (Stripe SaaS +
-          Mercado Pago sinais/clube) via Supabase central. Notificações no sino
-          espelham o ingest.
+          KPIs, receita, eventos e pagamentos (Stripe SaaS + Mercado Pago
+          sinais/clube). Notificações no sino.
         </p>
       </div>
 

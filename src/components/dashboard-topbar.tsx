@@ -150,7 +150,7 @@ export function DashboardTopbar() {
           type="button"
           variant="outline"
           className="h-8 gap-1.5 rounded-none border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20"
-          title="Busca métricas na RPC central; Stripe é fallback legado"
+          title="Atualizar métricas"
           disabled={loading}
           onClick={() => {
             void refresh();
@@ -160,15 +160,7 @@ export function DashboardTopbar() {
           {loading ? "Carregando…" : "Atualizar"}
         </Button>
         {generatedAt && loadedOnce ? (
-          <span
-            className="hidden lg:inline"
-            title={`Fonte: ${dashboard?.meta.source}`}
-          >
-            {dashboard?.meta.source === "supabase"
-              ? "central"
-              : dashboard?.meta.source}{" "}
-            {generatedAt}
-          </span>
+          <span className="hidden lg:inline">{generatedAt}</span>
         ) : (
           <span className="hidden md:inline text-muted-foreground/80">
             sem dados

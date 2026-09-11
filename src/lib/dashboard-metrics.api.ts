@@ -47,7 +47,7 @@ async function fetchCentralMetrics(
       "A RPC dashboard_metrics retornou um contrato vazio ou incompatível.",
     );
   vm.meta.source = "supabase";
-  vm.meta.message = "Fonte: Supabase central · RPC dashboard_metrics";
+  vm.meta.message = "";
   return vm;
 }
 

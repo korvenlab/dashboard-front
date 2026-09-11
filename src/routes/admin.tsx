@@ -4,7 +4,6 @@ import { ExternalLink, RefreshCw, Search, X } from "lucide-react";
 import {
   createCentralAccessLinkHttp,
   executeCentralAdminCommandHttp,
-  fetchCentralHealth,
   fetchUnifiedUserDetailsHttp,
   fetchUnifiedUsersHttp,
   reconcileCentralHttp,
@@ -57,7 +56,6 @@ function AdminPage() {
   const [actionByUser, setActionByUser] = useState<Record<string, ActionState>>(
     {},
   );
-  const [healthLabel, setHealthLabel] = useState("checando…");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
@@ -88,26 +86,6 @@ function AdminPage() {
   useEffect(() => {
     void load(1);
   }, [load]);
-
-  useEffect(() => {
-    void fetchCentralHealth()
-      .then((health) => {
-        if (!health.ok) {
-          setHealthLabel(
-            `env incompleta · url=${health.env.urlPresent} · key=${health.env.serviceRolePresent} · match=${health.env.urlMatchesKey}`,
-          );
-          return;
-        }
-        setHealthLabel(
-          `GET /api/dashboard/central/users · ${health.env.urlRef}`,
-        );
-      })
-      .catch((cause) => {
-        setHealthLabel(
-          cause instanceof Error ? cause.message : "health indisponível",
-        );
-      });
-  }, []);
 
   async function syncProducts() {
     setSyncing(true);
@@ -246,9 +224,6 @@ function AdminPage() {
             que lê o Postgres central com service role. Comandos e links passam
             pelas Edge Functions <code>admin-command</code> e{" "}
             <code>access-link</code>.
-          </p>
-          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-            Fonte ativa: {healthLabel}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
