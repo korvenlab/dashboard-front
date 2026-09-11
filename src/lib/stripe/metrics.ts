@@ -187,7 +187,7 @@ export async function fetchStripeDashboard(
   if (!stripe) {
     return {
       vm: null,
-      error: "Defina STRIPE_SECRET_KEY no servidor (Vercel).",
+      error: "Defina STRIPE_SECRET_KEY no servidor do Korven Dashboard.",
     };
   }
 

@@ -85,7 +85,7 @@ function LoginPanel({
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded border border-chart-4/50 bg-chart-4/10 p-6 font-mono text-xs leading-relaxed text-chart-4">
           Login não configurado no servidor. Defina <strong>KORVEN_DASHBOARD_USER</strong> e{" "}
-          <strong>KORVEN_DASHBOARD_PASSWORD</strong> nas variáveis de ambiente do Vercel.
+          <strong>KORVEN_DASHBOARD_PASSWORD</strong> nas variáveis de ambiente do Korven Dashboard.
         </div>
       </div>
     );
@@ -185,7 +185,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Painel administrativo Korven Lab — métricas e eventos Wagoo (wag-backend) e 2AVendas (2A-back).",
+          "Painel administrativo Korven Lab — control plane Supabase (Wagoo + 2AVendas).",
       },
       { name: "author", content: "Korven Lab" },
       { property: "og:title", content: "Korven Lab // Console" },

@@ -419,10 +419,10 @@ function WagooPaymentsPanel() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground">
-            Pagamentos · Stripe + Mercado Pago
+            Pagamentos · ingest Supabase
           </h2>
           <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
-            Sinais, clube e assinaturas ingeridos no control plane Korven.
+            Stripe (planos Wagoo) e Mercado Pago (sinais/clube) via Edge ingest.
             Também geram notificações no sino do topo.
           </p>
         </div>
@@ -527,9 +527,9 @@ function WagooPage() {
           Wagoo
         </h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          Visão de produto: KPIs, receita, eventos operacionais e pagamentos
-          (Stripe SaaS + Mercado Pago sinais). Notificações no sino do topo
-          espelham o control plane.
+          Visão de produto: KPIs, receita, eventos e pagamentos (Stripe SaaS +
+          Mercado Pago sinais/clube) via Supabase central. Notificações no sino
+          espelham o ingest.
         </p>
       </div>
 

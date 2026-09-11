@@ -249,7 +249,7 @@ function MonitoringPage() {
                         colSpan={5}
                         className="px-3 py-6 text-center font-mono text-xs text-muted-foreground"
                       >
-                        Nenhum evento MP no control plane ainda. Após um pagamento/webhook,
+                        Nenhum evento MP no Supabase ainda. Após um webhook ingerido,
                         aparece aqui.
                       </td>
                     </tr>

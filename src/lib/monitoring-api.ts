@@ -40,7 +40,7 @@ export type MpWebhookMonitorEvent = {
 export type MpWebhookMonitorResponse = {
   ok: boolean;
   fetchedAt: string;
-  /** Sempre control plane Supabase no Korven. */
+  /** Sempre Supabase central no Korven. */
   source: "supabase";
   summary: {
     last_24h_total: number;
@@ -143,8 +143,8 @@ const mpWebhookQuerySchema = z.object({
 });
 
 /**
- * Monitoramento MP no Korven = só Supabase central (payment_events + notifications).
- * O dashboard.korvenlab.com não depende de Render nem de WAGOO_API_BASE_URL aqui.
+ * Monitoramento MP no Korven = só Supabase central
+ * (payment_events, user_activity_events, notifications via Edge ingest).
  */
 export const fetchMpWebhookMonitoring = protectedServerFn("GET")
   .inputValidator(mpWebhookQuerySchema)

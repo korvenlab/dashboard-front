@@ -1,15 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Cloudflare: só válido se voltares a usar @cloudflare/vite-plugin no vite.config (deploy actual = Nitro/Vercel).
+  // Cloudflare: só se voltar @cloudflare/vite-plugin. Deploy atual = Nitro.
   "name": "tanstack-start-app",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts"
-  // Secrets / vars no Worker (não vão ao browser). Exemplo:
+  // Secrets no Worker / hosting. Exemplo:
   // "vars": {
-  //   "WAGOO_API_BASE_URL": "https://api-wagoo...",
-  //   "TWO_AVENDAS_API_BASE_URL": "https://api-2avendas..."
+  //   "SUPABASE_URL": "https://xxx.supabase.co"
   // }
-  // wrangler secret put STRIPE_SECRET_KEY
-  // Métricas Korven: Stripe (STRIPE_SECRET_KEY). Admin/monitoramento ainda podem usar WAGOO_* / DASHBOARD_BACKEND_*.
+  // Métricas: STRIPE_* opcional; admin produto usa WAGOO_* / TWO_AVENDAS_* nas Edge Functions.
 }

@@ -72,7 +72,7 @@ const notificationMutationSchema = z.object({
 });
 
 /**
- * API HTTP do painel central — mesmo runtime Nitro/Vercel de `/api/dashboard/metrics`.
+ * API HTTP do painel central — mesmo runtime Nitro de `/api/dashboard/metrics`.
  * Evita server functions do TanStack que podem não enxergar as envs de produção.
  */
 export async function handleDashboardCentralApi(

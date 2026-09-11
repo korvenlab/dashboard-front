@@ -34,7 +34,7 @@ export function getSupabaseServerClient(
     const diag = describeSupabaseEnv();
     throw new Error(
       options.admin
-        ? `Supabase central não configurado no runtime (url=${diag.urlPresent}, service_role=${diag.serviceRolePresent}). Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY na Vercel Production e redeploy.`
+        ? `Supabase central não configurado no runtime (url=${diag.urlPresent}, service_role=${diag.serviceRolePresent}). Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente do Korven Dashboard e redeploy.`
         : `Supabase central não configurado no runtime (url=${diag.urlPresent}, anon=${diag.anonPresent}). Defina SUPABASE_URL e SUPABASE_ANON_KEY (ou SUPABASE_PUBLISHABLE_KEY).`,
     );
   }

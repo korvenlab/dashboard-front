@@ -430,7 +430,7 @@ export async function listNotifications(includeArchived = false) {
   })) satisfies Notification[];
 }
 
-/** Monitoramento MP via control plane (ingest) — sem depender de WAGOO_API_BASE_URL. */
+/** Monitoramento MP via Supabase central (ingest Edge). */
 export type MpCentralMonitorEvent = {
   id: string;
   source: "ingest" | "notification";

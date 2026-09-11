@@ -29,7 +29,7 @@ export type SupabaseServerEnv = {
   serviceRoleKey: string | undefined;
 };
 
-/** Remove aspas envolventes e `\n` final (copy-paste de `.env` no Render / painéis). */
+/** Remove aspas envolventes e `\n` final (copy-paste de `.env` / painéis). */
 export function stripEnvNoise(v: string | undefined): string | undefined {
   if (v === undefined || v === null) return undefined;
   let s = String(v).trim();
@@ -50,7 +50,7 @@ export function stripEnvNoise(v: string | undefined): string | undefined {
 
 /**
  * Leitura dinâmica de env. Nunca use `process.env.NOME` literal — o bundler Vite/Nitro
- * pode substituir por string vazia no build e quebrar o runtime da Vercel.
+ * pode substituir por string vazia no build e quebrar o runtime.
  */
 export function envGet(name: string): string | undefined {
   const g = globalThis as typeof globalThis & {

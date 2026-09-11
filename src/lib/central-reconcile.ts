@@ -43,7 +43,7 @@ function resolveBaseUrl(source: ReconcileProduct): string {
       base = base.slice(0, -"/api/admin".length).replace(/\/+$/, "");
     }
     if (!base) {
-      throw new Error("Wagoo: defina WAGOO_API_BASE_URL na Vercel.");
+      throw new Error("Wagoo: defina WAGOO_API_BASE_URL no ambiente do Korven (Edge/secret).");
     }
     return base;
   }
@@ -51,7 +51,7 @@ function resolveBaseUrl(source: ReconcileProduct): string {
     getTwoAvendasServerEnv().apiBaseUrl?.replace(/\/+$/, "") ?? "";
   if (!base) {
     throw new Error(
-      "2AVendas: defina TWO_AVENDAS_API_BASE_URL (ou DASHBOARD_BACKEND_BASE_URL) na Vercel.",
+      "2AVendas: defina TWO_AVENDAS_API_BASE_URL (ou DASHBOARD_BACKEND_BASE_URL) no ambiente do Korven.",
     );
   }
   return base;
@@ -128,7 +128,7 @@ async function fetchSyncPage(
   if (!res.ok) {
     const hint =
       res.status === 401 || res.status === 403
-        ? " · a chave na Vercel não bate com ADMIN_API_SECRET/METRICS_API_KEY do backend"
+        ? " · a chave no Korven não bate com ADMIN_API_SECRET/METRICS_API_KEY do backend"
         : "";
     throw new Error(
       `${source}: sync HTTP ${res.status} em ${baseUrl}${hint} · ${text.slice(0, 180)}`,

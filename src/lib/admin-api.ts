@@ -420,8 +420,8 @@ async function callAdminApi(
   if (!base || !key) {
     const hint =
       source === "wagoo"
-        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou METRICS_API_KEY / ADMIN_API_SECRET) no Vercel."
-        : "Defina DASHBOARD_BACKEND_BASE_URL e DASHBOARD_BACKEND_API_KEY (ou TWO_AVENDAS_* / METRICS_API_KEY) no Vercel.";
+        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou METRICS_API_KEY / ADMIN_API_SECRET) no ambiente do Korven."
+        : "Defina DASHBOARD_BACKEND_BASE_URL e DASHBOARD_BACKEND_API_KEY (ou TWO_AVENDAS_* / METRICS_API_KEY) no ambiente do Korven.";
     throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
   const url = new URL(`${resolveAdminApiBaseUrl(base, source)}${path}`);

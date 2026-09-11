@@ -5,20 +5,14 @@ import { defineConfig } from "vite";
 import viteReact from "@vitejs/plugin-react";
 import viteTsConfigPaths from "vite-tsconfig-paths";
 
-/** Build com Nitro → compatível com Vercel (Functions). Cloudflare Workers usa plugin `@cloudflare/vite-plugin` em vez de Nitro. */
+/** Build com Nitro (server functions). Cloudflare Workers exige plugin próprio. */
 export default defineConfig({
   server: { port: 3000 },
   build: {
     reportCompressedSize: false,
   },
   preview: {
-    allowedHosts: [
-      ".vercel.app",
-      ".onrender.com",
-      "dashboard-9nrn.onrender.com",
-      ".korvenlab.com",
-      "dashboard.korvenlab.com",
-    ],
+    allowedHosts: [".vercel.app", ".korvenlab.com", "dashboard.korvenlab.com", "localhost"],
   },
   plugins: [
     viteTsConfigPaths({ projects: ["./tsconfig.json"] }),
