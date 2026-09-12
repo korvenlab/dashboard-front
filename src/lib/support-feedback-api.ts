@@ -1,4 +1,4 @@
-import { getTwoAvendasServerEnv, getWagooServerEnv } from "@/lib/server-env";
+import { getWagooServerEnv } from "@/lib/server-env";
 
 export type FeedbackSource = "wagoo" | "2avendas";
 
@@ -48,8 +48,7 @@ function parseRow(raw: unknown): Omit<FeedbackMessageRow, "source"> | null {
   };
 }
 
-async function fetchFeedbackMessagesFromBackend(
-  label: string,
+async function fetchWagooFeedbackMessages(
   baseUrl: string | undefined,
   apiKey: string | undefined,
 ): Promise<FeedbackMessageRow[]> {
@@ -57,20 +56,26 @@ async function fetchFeedbackMessagesFromBackend(
   const key = apiKey?.trim();
   if (!base || !key) {
     throw new Error(
-      `${label}: variáveis de ambiente ausentes no servidor do dashboard.`,
+      "Wagoo: variáveis de ambiente ausentes no servidor do dashboard.",
     );
   }
 
   const url = `${base.replace(/\/+$/, "")}/feedback/messages?limit=300`;
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${key}`,
-      "X-API-Key": key,
-      "x-admin-secret": key,
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${key}`,
+        "X-API-Key": key,
+        "x-admin-secret": key,
+      },
+      cache: "no-store",
+    });
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(`Wagoo: não alcançou ${base} (${detail}).`);
+  }
 
   const text = await res.text();
   let json: unknown = {};
@@ -85,22 +90,21 @@ async function fetchFeedbackMessagesFromBackend(
     const msg =
       typeof root.error === "string"
         ? root.error
-        : `Falha ao carregar mensagens (${label}, HTTP ${res.status}).`;
+        : `Falha ao carregar mensagens (Wagoo, HTTP ${res.status}).`;
     throw new Error(msg);
   }
 
   const items = asArray(root.data);
   const rows: FeedbackMessageRow[] = [];
-  const src: FeedbackSource = label === "Wagoo" ? "wagoo" : "2avendas";
   for (const item of items) {
     const parsed = parseRow(item);
-    if (parsed) rows.push({ ...parsed, source: src });
+    if (parsed) rows.push({ ...parsed, source: "wagoo" });
   }
   return rows;
 }
 
 /**
- * Agrega mensagens de suporte Wagoo + 2AVendas.
+ * Mensagens de suporte do Wagoo (2AVendas desligado por enquanto).
  * Usar só no server (HTTP `/api/dashboard/admin/feedback`).
  */
 export async function listSupportFeedbackMessages(): Promise<SupportFeedbackPayload> {
@@ -114,28 +118,9 @@ export async function listSupportFeedbackMessages(): Promise<SupportFeedbackPayl
     );
   } else {
     try {
-      const rows = await fetchFeedbackMessagesFromBackend(
-        "Wagoo",
+      const rows = await fetchWagooFeedbackMessages(
         wagEnv.apiBaseUrl,
         wagEnv.metricsApiKey,
-      );
-      merged.push(...rows);
-    } catch (e) {
-      warnings.push(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  const avEnv = getTwoAvendasServerEnv();
-  if (!avEnv.apiBaseUrl?.trim() || !avEnv.metricsApiKey?.trim()) {
-    warnings.push(
-      "2AVendas: configure TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY no servidor do dashboard.",
-    );
-  } else {
-    try {
-      const rows = await fetchFeedbackMessagesFromBackend(
-        "2AVendas",
-        avEnv.apiBaseUrl,
-        avEnv.metricsApiKey,
       );
       merged.push(...rows);
     } catch (e) {
@@ -155,30 +140,37 @@ export async function deleteSupportFeedbackMessageService(input: {
   source: FeedbackSource;
   id: string;
 }): Promise<{ id: string; deleted: boolean }> {
+  if (input.source !== "wagoo") {
+    throw new Error("2AVendas está desligado em Mensagens por enquanto.");
+  }
+
   const wagEnv = getWagooServerEnv();
-  const avEnv = getTwoAvendasServerEnv();
-  const env = input.source === "wagoo" ? wagEnv : avEnv;
-  const base = env.apiBaseUrl?.trim();
-  const key = env.metricsApiKey?.trim();
-  const label = input.source === "wagoo" ? "Wagoo" : "2AVendas";
+  const base = wagEnv.apiBaseUrl?.trim();
+  const key = wagEnv.metricsApiKey?.trim();
 
   if (!base || !key) {
     throw new Error(
-      `${label}: variáveis de ambiente ausentes no servidor do dashboard.`,
+      "Wagoo: variáveis de ambiente ausentes no servidor do dashboard.",
     );
   }
 
   const url = `${base.replace(/\/+$/, "")}/feedback/messages/${encodeURIComponent(input.id)}`;
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${key}`,
-      "X-API-Key": key,
-      "x-admin-secret": key,
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${key}`,
+        "X-API-Key": key,
+        "x-admin-secret": key,
+      },
+      cache: "no-store",
+    });
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(`Wagoo: não alcançou ${base} (${detail}).`);
+  }
 
   const text = await res.text();
   let json: unknown = {};
@@ -193,7 +185,7 @@ export async function deleteSupportFeedbackMessageService(input: {
     const msg =
       typeof root.error === "string"
         ? root.error
-        : `Falha ao apagar mensagem (${label}, HTTP ${res.status}).`;
+        : `Falha ao apagar mensagem (Wagoo, HTTP ${res.status}).`;
     throw new Error(msg);
   }
 
