@@ -76,7 +76,7 @@ function MensagensPage() {
           Mensagens
         </h1>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
-          Bugs e sugestões dos apps Wagoo e 2AVendas.
+          Bugs e sugestões do Wagoo.
         </p>
       </div>
 
