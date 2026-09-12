@@ -213,6 +213,38 @@ export async function fetchCentralUptimeHttp(): Promise<CentralUptimeResponse> {
   return centralFetch("/api/dashboard/central/uptime");
 }
 
+export type CentralDeployRow = {
+  provider: "vercel" | "render";
+  project: string;
+  id: string;
+  status: string;
+  healthy: boolean | null;
+  target: string | null;
+  url: string | null;
+  commit: string | null;
+  createdAt: string | null;
+  inspectorUrl: string | null;
+};
+
+export type CentralDeploysResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  vercel: {
+    skipped: boolean;
+    message?: string;
+    items: CentralDeployRow[];
+  };
+  render: {
+    skipped: boolean;
+    message?: string;
+    items: CentralDeployRow[];
+  };
+};
+
+export async function fetchCentralDeploysHttp(): Promise<CentralDeploysResponse> {
+  return centralFetch("/api/dashboard/central/deploys");
+}
+
 export async function mutateNotificationHttp(input: {
   id: string;
   action: "read" | "archive";

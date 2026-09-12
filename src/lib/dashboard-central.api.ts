@@ -11,6 +11,7 @@ import {
   runCentralAdminCommand,
 } from "@/lib/central-service";
 import { reconcileCentralProducts } from "@/lib/central-reconcile";
+import { listDeployMonitoring } from "@/lib/deploy-monitoring";
 import { getUptimeRobotApiKey } from "@/lib/server-env";
 import { z } from "zod";
 import {
@@ -245,6 +246,13 @@ export async function handleDashboardCentralApi(
       request.method === "GET"
     ) {
       return await handleCentralUptimeMonitoring();
+    }
+
+    if (
+      pathname === "/api/dashboard/central/deploys" &&
+      request.method === "GET"
+    ) {
+      return jsonOk(await listDeployMonitoring());
     }
 
     if (

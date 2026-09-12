@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  fetchCentralDeploysHttp,
   fetchCentralMpMonitoringHttp,
   fetchCentralUptimeHttp,
+  type CentralDeploysResponse,
+  type CentralDeployRow,
   type CentralMpMonitoringResponse,
   type CentralUptimeResponse,
 } from "@/lib/central-http";
@@ -20,8 +23,10 @@ function statusClass(status: string): string {
 }
 
 function healthClass(healthy: boolean | null): string {
-  if (healthy === true) return "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
-  if (healthy === false) return "border-rose-500/50 bg-rose-500/10 text-rose-300";
+  if (healthy === true)
+    return "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  if (healthy === false)
+    return "border-rose-500/50 bg-rose-500/10 text-rose-300";
   return "border-amber-500/50 bg-amber-500/10 text-amber-300";
 }
 
@@ -29,6 +34,18 @@ function healthLabel(healthy: boolean | null): string {
   if (healthy === true) return "Recente";
   if (healthy === false) return "Sem eventos >48h";
   return "Sem dados / silencioso";
+}
+
+function deployStatusClass(healthy: boolean | null, status: string): string {
+  if (healthy === true)
+    return "border-emerald-500/50 bg-emerald-500/10 text-emerald-300";
+  if (healthy === false)
+    return "border-rose-500/50 bg-rose-500/10 text-rose-300";
+  const s = status.toLowerCase();
+  if (s.includes("build") || s.includes("queue") || s.includes("progress")) {
+    return "border-amber-500/50 bg-amber-500/10 text-amber-300";
+  }
+  return "border-border bg-card/40 text-muted-foreground";
 }
 
 function formatAge(sec: number | null): string {
@@ -58,6 +75,126 @@ function latestResponseMs(responseTimes: unknown[]): number | null {
   return null;
 }
 
+function DeployTable({
+  title,
+  skipped,
+  message,
+  items,
+}: {
+  title: string;
+  skipped: boolean;
+  message?: string;
+  items: CentralDeployRow[];
+}) {
+  const failed = items.filter((i) => i.healthy === false).length;
+
+  return (
+    <div className="space-y-3 rounded border border-border bg-card/20 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.15em]">
+          {title}
+        </h3>
+        {!skipped && items.length > 0 ? (
+          <span
+            className={`rounded border px-2 py-0.5 font-mono text-[10px] ${
+              failed > 0
+                ? "border-rose-500/50 bg-rose-500/10 text-rose-300"
+                : "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+            }`}
+          >
+            {failed > 0 ? `${failed} falha(s)` : "ok"}
+          </span>
+        ) : null}
+      </div>
+
+      {skipped ? (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {message ?? "Não configurado."}
+        </p>
+      ) : null}
+
+      {!skipped && message ? (
+        <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-300">
+          {message}
+        </div>
+      ) : null}
+
+      {!skipped && !message && items.length === 0 ? (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Nenhum deploy recente nos projetos filtrados.
+        </p>
+      ) : null}
+
+      {!skipped && items.length > 0 ? (
+        <div className="overflow-x-auto rounded border border-border">
+          <table className="w-full min-w-[860px] border-collapse">
+            <thead>
+              <tr className="border-b border-border bg-card">
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                  Projeto
+                </th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                  Quando
+                </th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                  Target
+                </th>
+                <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider">
+                  Commit / msg
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((row) => (
+                <tr
+                  key={`${row.provider}-${row.id}`}
+                  className="border-b border-border/50"
+                >
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {row.inspectorUrl || row.url ? (
+                      <a
+                        href={row.inspectorUrl ?? row.url ?? "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {row.project}
+                      </a>
+                    ) : (
+                      row.project
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase ${deployStatusClass(row.healthy, row.status)}`}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {row.createdAt
+                      ? new Date(row.createdAt).toLocaleString("pt-BR")
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {row.target ?? "—"}
+                  </td>
+                  <td className="max-w-[280px] truncate px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {row.commit ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,7 +203,13 @@ function MonitoringPage() {
 
   const [mpLoading, setMpLoading] = useState(true);
   const [mpError, setMpError] = useState("");
-  const [mpData, setMpData] = useState<CentralMpMonitoringResponse | null>(null);
+  const [mpData, setMpData] = useState<CentralMpMonitoringResponse | null>(
+    null,
+  );
+
+  const [deploysLoading, setDeploysLoading] = useState(true);
+  const [deploysError, setDeploysError] = useState("");
+  const [deploys, setDeploys] = useState<CentralDeploysResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +254,22 @@ function MonitoringPage() {
       }
     })();
 
+    void (async () => {
+      setDeploysLoading(true);
+      setDeploysError("");
+      try {
+        const result = await fetchCentralDeploysHttp();
+        if (!cancelled) setDeploys(result);
+      } catch (e) {
+        if (!cancelled) {
+          setDeploysError(e instanceof Error ? e.message : String(e));
+          setDeploys(null);
+        }
+      } finally {
+        if (!cancelled) setDeploysLoading(false);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -127,9 +286,49 @@ function MonitoringPage() {
           Monitoramento
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          Atualiza ao abrir · Mercado Pago · UptimeRobot opcional.
+          Atualiza ao abrir · Mercado Pago · Deploys · UptimeRobot opcional.
         </p>
       </div>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-[0.15em]">
+            Deploys · Vercel / Render
+          </h2>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            Últimos deploys; falhas aparecem em destaque.
+          </p>
+        </div>
+
+        {deploysLoading ? (
+          <p className="font-mono text-xs text-muted-foreground">
+            Carregando deploys…
+          </p>
+        ) : null}
+
+        {deploysError ? (
+          <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-300">
+            {deploysError}
+          </div>
+        ) : null}
+
+        {deploys ? (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <DeployTable
+              title="Vercel"
+              skipped={deploys.vercel.skipped}
+              message={deploys.vercel.message}
+              items={deploys.vercel.items}
+            />
+            <DeployTable
+              title="Render"
+              skipped={deploys.render.skipped}
+              message={deploys.render.message}
+              items={deploys.render.items}
+            />
+          </div>
+        ) : null}
+      </section>
 
       <section className="space-y-4 rounded border border-border bg-card/20 p-4">
         <div>
@@ -142,7 +341,9 @@ function MonitoringPage() {
         </div>
 
         {mpLoading ? (
-          <p className="font-mono text-xs text-muted-foreground">Carregando webhooks MP…</p>
+          <p className="font-mono text-xs text-muted-foreground">
+            Carregando webhooks MP…
+          </p>
         ) : null}
 
         {mpError ? (
@@ -158,7 +359,9 @@ function MonitoringPage() {
                 <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   Eventos 24h
                 </div>
-                <div className="mt-1 font-mono text-2xl">{mpData.summary.last_24h_total}</div>
+                <div className="mt-1 font-mono text-2xl">
+                  {mpData.summary.last_24h_total}
+                </div>
               </div>
               <div className="rounded border border-border bg-card/40 p-3">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -166,7 +369,9 @@ function MonitoringPage() {
                 </div>
                 <div className="mt-1 font-mono text-sm">
                   {mpData.summary.last_received_at
-                    ? new Date(mpData.summary.last_received_at).toLocaleString("pt-BR")
+                    ? new Date(mpData.summary.last_received_at).toLocaleString(
+                        "pt-BR",
+                      )
                     : "—"}
                 </div>
                 <div className="mt-1 font-mono text-[10px] text-muted-foreground">
@@ -220,14 +425,21 @@ function MonitoringPage() {
                 </thead>
                 <tbody>
                   {mpData.events.map((e) => (
-                    <tr key={String(e.id)} className="border-b border-border/50">
+                    <tr
+                      key={String(e.id)}
+                      className="border-b border-border/50"
+                    >
                       <td className="px-3 py-2 font-mono text-xs">
                         {new Date(e.processed_at).toLocaleString("pt-BR")}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{e.topic}</td>
                       <td className="px-3 py-2 font-mono text-xs">{e.data_id}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{e.kind ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{e.source ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {e.kind ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {e.source ?? "—"}
+                      </td>
                     </tr>
                   ))}
                   {mpData.events.length === 0 ? (
@@ -255,11 +467,15 @@ function MonitoringPage() {
                       key={s.id}
                       className="flex flex-wrap items-baseline gap-2 rounded border border-border/60 bg-card/30 px-3 py-1.5 font-mono text-[11px]"
                     >
-                      <span className={`rounded border px-1.5 ${statusClass(s.status)}`}>
+                      <span
+                        className={`rounded border px-1.5 ${statusClass(s.status)}`}
+                      >
                         {s.status}
                       </span>
                       <span className="text-muted-foreground">
-                        {s.timestamp ? new Date(s.timestamp).toLocaleString("pt-BR") : ""}
+                        {s.timestamp
+                          ? new Date(s.timestamp).toLocaleString("pt-BR")
+                          : ""}
                       </span>
                       <span>{s.message}</span>
                     </li>
@@ -282,13 +498,15 @@ function MonitoringPage() {
         </div>
 
         {loading ? (
-          <p className="font-mono text-xs text-muted-foreground">Carregando monitores…</p>
+          <p className="font-mono text-xs text-muted-foreground">
+            Carregando monitores…
+          </p>
         ) : null}
 
         {uptimeSkipped ? (
           <div className="rounded border border-border bg-card/30 px-3 py-2 font-mono text-xs text-muted-foreground">
-            UptimeRobot não configurado (defina UPTIMEROBOT_API_KEY). O bloco Mercado Pago
-            acima não depende disso.
+            UptimeRobot não configurado (defina UPTIMEROBOT_API_KEY). O bloco
+            Mercado Pago acima não depende disso.
           </div>
         ) : null}
 
@@ -358,7 +576,10 @@ function MonitoringPage() {
                 {data.monitors.map((m) => {
                   const currentMs = latestResponseMs(m.responseTimes);
                   return (
-                    <tr key={`${m.id ?? m.name}`} className="border-b border-border/50">
+                    <tr
+                      key={`${m.id ?? m.name}`}
+                      className="border-b border-border/50"
+                    >
                       <td className="px-3 py-2 font-mono text-xs">{m.name}</td>
                       <td className="px-3 py-2">
                         <span
@@ -367,10 +588,18 @@ function MonitoringPage() {
                           {m.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs">{m.statusCode}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{m.url ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{m.uptimeRatio ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{m.interval ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {m.statusCode}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {m.url ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {m.uptimeRatio ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {m.interval ?? "—"}
+                      </td>
                       <td className="px-3 py-2 font-mono text-xs">
                         {countRecentIncidents(m.logs)}
                       </td>

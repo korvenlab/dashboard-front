@@ -84,6 +84,12 @@ function staticEnvBag(): Record<string, string | undefined> {
     KORVEN_SESSION_SECRET: process.env.KORVEN_SESSION_SECRET,
     FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN,
     WAGOO_INGEST_SECRET: process.env.WAGOO_INGEST_SECRET,
+    VERCEL_TOKEN: process.env.VERCEL_TOKEN,
+    VERCEL_ACCESS_TOKEN: process.env.VERCEL_ACCESS_TOKEN,
+    VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
+    VERCEL_MONITOR_PROJECTS: process.env.VERCEL_MONITOR_PROJECTS,
+    RENDER_API_KEY: process.env.RENDER_API_KEY,
+    RENDER_MONITOR_SERVICES: process.env.RENDER_MONITOR_SERVICES,
   };
 }
 
@@ -190,6 +196,36 @@ export function getDashboardBackendEnv(): DashboardBackendEnv {
 
 export function getUptimeRobotApiKey(): string | undefined {
   return envGet("UPTIMEROBOT_API_KEY");
+}
+
+/** Tokens para listar deploys no /monitoramento (opcional). */
+export function getVercelDeployMonitorEnv(): {
+  token: string | undefined;
+  teamId: string | undefined;
+  projectFilter: string | undefined;
+} {
+  return {
+    token: firstNonEmptyTrimmed(
+      envGet("VERCEL_TOKEN"),
+      envGet("VERCEL_ACCESS_TOKEN"),
+    ),
+    // Team do Korven Dashboard (fallback seguro só neste painel privado).
+    teamId: firstNonEmptyTrimmed(
+      envGet("VERCEL_TEAM_ID"),
+      "team_GS7nSeybesq8GCULqEpGC7HR",
+    ),
+    projectFilter: envGet("VERCEL_MONITOR_PROJECTS"),
+  };
+}
+
+export function getRenderDeployMonitorEnv(): {
+  apiKey: string | undefined;
+  serviceFilter: string | undefined;
+} {
+  return {
+    apiKey: envGet("RENDER_API_KEY"),
+    serviceFilter: envGet("RENDER_MONITOR_SERVICES"),
+  };
 }
 
 function decodeJwtPayload(

@@ -125,6 +125,7 @@ export function getCentralHealth() {
       payments: "GET /api/dashboard/central/payments",
       mpMonitoring: "GET /api/dashboard/central/mp-monitoring",
       uptime: "GET /api/dashboard/central/uptime",
+      deploys: "GET /api/dashboard/central/deploys",
       publicConfig: "GET /api/dashboard/central/public-config",
       metrics: "GET /api/dashboard/metrics",
     },
