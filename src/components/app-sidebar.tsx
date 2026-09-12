@@ -97,12 +97,12 @@ export function AppSidebar({ dynamicItems, onLogout }: Props) {
         <Link to="/" search={search} className="flex items-center gap-2">
           <img
             src="/korven-logo.png"
-            alt="Korven"
-            className="h-8 w-8 object-contain"
+            alt="Korven Lab"
+            className="h-9 w-9 rounded-md object-contain"
             loading="eager"
             decoding="async"
             onError={(e) => {
-              e.currentTarget.src = "/korven-logo.svg";
+              e.currentTarget.src = "/korven-mark.png";
             }}
           />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">

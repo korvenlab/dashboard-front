@@ -96,11 +96,11 @@ function LoginPanel({
       <div className="w-full max-w-md rounded border border-border bg-card/40 p-6 backdrop-blur">
         <div className="mb-6 flex flex-col items-center gap-3">
           <img
-            src="/korven-wordmark.png"
+            src="/korven-logo.png"
             alt="Korven Lab"
-            className="h-20 w-auto object-contain"
+            className="h-24 w-24 object-contain"
             onError={(e) => {
-              e.currentTarget.src = "/korven-logo.svg";
+              e.currentTarget.src = "/korven-mark.png";
             }}
           />
           <h1 className="font-mono text-sm uppercase tracking-[0.35em] text-foreground">Acesso ao Dashboard</h1>
@@ -196,7 +196,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "icon", type: "image/png", href: "/korven-logo.png" },
-      { rel: "icon", type: "image/svg+xml", href: "/korven-logo.svg" },
+      { rel: "apple-touch-icon", href: "/korven-logo.png" },
       { rel: "shortcut icon", href: "/korven-logo.png" },
       {
         rel: "stylesheet",

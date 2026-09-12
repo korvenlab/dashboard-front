@@ -1,8 +1,10 @@
-Place the official PNG logo at:
+Official Korven Lab mark (raven in circle):
   /public/korven-logo.png
 
-Expected file name:
-  korven-logo.png
+Used for:
+  - login screen
+  - sidebar icon
+  - favicon / apple-touch-icon
 
-The app currently references PNG first (favicon + sidebar) and falls back to
-`/korven-logo.svg` if PNG is missing.
+Fallback:
+  /public/korven-mark.png (same asset)
