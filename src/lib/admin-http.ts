@@ -148,3 +148,35 @@ export async function deleteTwoAvendasPromoLinkHttp(input: {
     { method: "DELETE" },
   );
 }
+
+export type FeedbackSource = "wagoo" | "2avendas";
+
+export type FeedbackMessageRow = {
+  source: FeedbackSource;
+  id: string;
+  created_at: string;
+  user_id: string;
+  organization_id: string | null;
+  user_email: string | null;
+  user_full_name: string | null;
+  body: string;
+};
+
+export type SupportFeedbackPayload = {
+  items: FeedbackMessageRow[];
+  warnings: string[];
+};
+
+export async function fetchSupportFeedbackHttp(): Promise<SupportFeedbackPayload> {
+  return adminFetch("/api/dashboard/admin/feedback");
+}
+
+export async function deleteSupportFeedbackHttp(input: {
+  source: FeedbackSource;
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  return adminFetch(
+    `/api/dashboard/admin/feedback/${input.source}/${encodeURIComponent(input.id)}`,
+    { method: "DELETE" },
+  );
+}

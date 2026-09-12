@@ -1,5 +1,3 @@
-import { protectedServerFn } from "@/lib/protected-server-fn";
-import { z } from "zod";
 import { getTwoAvendasServerEnv, getWagooServerEnv } from "@/lib/server-env";
 
 export type FeedbackSource = "wagoo" | "2avendas";
@@ -21,17 +19,14 @@ export type SupportFeedbackPayload = {
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
 }
 
 function asArray(v: unknown): unknown[] {
   return Array.isArray(v) ? v : [];
 }
-
-const deleteFeedbackSchema = z.object({
-  source: z.enum(["wagoo", "2avendas"]),
-  id: z.string().uuid(),
-});
 
 function parseRow(raw: unknown): Omit<FeedbackMessageRow, "source"> | null {
   const r = asRecord(raw);
@@ -44,9 +39,11 @@ function parseRow(raw: unknown): Omit<FeedbackMessageRow, "source"> | null {
     id,
     created_at,
     user_id,
-    organization_id: typeof r.organization_id === "string" ? r.organization_id : null,
+    organization_id:
+      typeof r.organization_id === "string" ? r.organization_id : null,
     user_email: typeof r.user_email === "string" ? r.user_email : null,
-    user_full_name: typeof r.user_full_name === "string" ? r.user_full_name : null,
+    user_full_name:
+      typeof r.user_full_name === "string" ? r.user_full_name : null,
     body,
   };
 }
@@ -59,7 +56,9 @@ async function fetchFeedbackMessagesFromBackend(
   const base = baseUrl?.trim();
   const key = apiKey?.trim();
   if (!base || !key) {
-    throw new Error(`${label}: variáveis de ambiente ausentes no servidor do dashboard.`);
+    throw new Error(
+      `${label}: variáveis de ambiente ausentes no servidor do dashboard.`,
+    );
   }
 
   const url = `${base.replace(/\/+$/, "")}/feedback/messages?limit=300`;
@@ -70,6 +69,7 @@ async function fetchFeedbackMessagesFromBackend(
       "X-API-Key": key,
       "x-admin-secret": key,
     },
+    cache: "no-store",
   });
 
   const text = await res.text();
@@ -100,104 +100,107 @@ async function fetchFeedbackMessagesFromBackend(
 }
 
 /**
- * Agrega mensagens de suporte dos apps Wagoo (wag-backend) e 2AVendas (2A-back).
- * Mesmo contrato `/feedback/messages` + API key de métricas/admin em cada origem.
+ * Agrega mensagens de suporte Wagoo + 2AVendas.
+ * Usar só no server (HTTP `/api/dashboard/admin/feedback`).
  */
-export const fetchSupportFeedbackMessages = protectedServerFn("GET")
-  .inputValidator(z.object({}))
-  .handler(async (): Promise<SupportFeedbackPayload> => {
-    const warnings: string[] = [];
-    const merged: FeedbackMessageRow[] = [];
+export async function listSupportFeedbackMessages(): Promise<SupportFeedbackPayload> {
+  const warnings: string[] = [];
+  const merged: FeedbackMessageRow[] = [];
 
-    const wagEnv = getWagooServerEnv();
-    if (!wagEnv.apiBaseUrl?.trim() || !wagEnv.metricsApiKey?.trim()) {
-      warnings.push(
-        "Wagoo: configure WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY ou ADMIN_API_SECRET (igual ao wag-backend) no servidor do dashboard.",
+  const wagEnv = getWagooServerEnv();
+  if (!wagEnv.apiBaseUrl?.trim() || !wagEnv.metricsApiKey?.trim()) {
+    warnings.push(
+      "Wagoo: configure WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY ou ADMIN_API_SECRET (igual ao wag-backend) no servidor do dashboard.",
+    );
+  } else {
+    try {
+      const rows = await fetchFeedbackMessagesFromBackend(
+        "Wagoo",
+        wagEnv.apiBaseUrl,
+        wagEnv.metricsApiKey,
       );
-    } else {
-      try {
-        const rows = await fetchFeedbackMessagesFromBackend(
-          "Wagoo",
-          wagEnv.apiBaseUrl,
-          wagEnv.metricsApiKey,
-        );
-        merged.push(...rows);
-      } catch (e) {
-        warnings.push(e instanceof Error ? e.message : String(e));
-      }
+      merged.push(...rows);
+    } catch (e) {
+      warnings.push(e instanceof Error ? e.message : String(e));
     }
+  }
 
-    const avEnv = getTwoAvendasServerEnv();
-    if (!avEnv.apiBaseUrl?.trim() || !avEnv.metricsApiKey?.trim()) {
-      warnings.push(
-        "2AVendas: configure TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY no servidor do dashboard.",
+  const avEnv = getTwoAvendasServerEnv();
+  if (!avEnv.apiBaseUrl?.trim() || !avEnv.metricsApiKey?.trim()) {
+    warnings.push(
+      "2AVendas: configure TWO_AVENDAS_API_BASE_URL e TWO_AVENDAS_METRICS_API_KEY no servidor do dashboard.",
+    );
+  } else {
+    try {
+      const rows = await fetchFeedbackMessagesFromBackend(
+        "2AVendas",
+        avEnv.apiBaseUrl,
+        avEnv.metricsApiKey,
       );
-    } else {
-      try {
-        const rows = await fetchFeedbackMessagesFromBackend(
-          "2AVendas",
-          avEnv.apiBaseUrl,
-          avEnv.metricsApiKey,
-        );
-        merged.push(...rows);
-      } catch (e) {
-        warnings.push(e instanceof Error ? e.message : String(e));
-      }
+      merged.push(...rows);
+    } catch (e) {
+      warnings.push(e instanceof Error ? e.message : String(e));
     }
+  }
 
-    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  merged.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 
-    if (merged.length === 0 && warnings.length > 0) {
-      throw new Error(warnings.join(" "));
-    }
+  return { items: merged, warnings };
+}
 
-    return { items: merged, warnings };
+export async function deleteSupportFeedbackMessageService(input: {
+  source: FeedbackSource;
+  id: string;
+}): Promise<{ id: string; deleted: boolean }> {
+  const wagEnv = getWagooServerEnv();
+  const avEnv = getTwoAvendasServerEnv();
+  const env = input.source === "wagoo" ? wagEnv : avEnv;
+  const base = env.apiBaseUrl?.trim();
+  const key = env.metricsApiKey?.trim();
+  const label = input.source === "wagoo" ? "Wagoo" : "2AVendas";
+
+  if (!base || !key) {
+    throw new Error(
+      `${label}: variáveis de ambiente ausentes no servidor do dashboard.`,
+    );
+  }
+
+  const url = `${base.replace(/\/+$/, "")}/feedback/messages/${encodeURIComponent(input.id)}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${key}`,
+      "X-API-Key": key,
+      "x-admin-secret": key,
+    },
+    cache: "no-store",
   });
 
-export const deleteSupportFeedbackMessage = protectedServerFn("POST")
-  .inputValidator(deleteFeedbackSchema)
-  .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
-    const { data } = ctx as { data: z.infer<typeof deleteFeedbackSchema> };
-    const wagEnv = getWagooServerEnv();
-    const avEnv = getTwoAvendasServerEnv();
-    const env = data.source === "wagoo" ? wagEnv : avEnv;
-    const base = env.apiBaseUrl?.trim();
-    const key = env.metricsApiKey?.trim();
-    const label = data.source === "wagoo" ? "Wagoo" : "2AVendas";
+  const text = await res.text();
+  let json: unknown = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = {};
+  }
 
-    if (!base || !key) {
-      throw new Error(`${label}: variáveis de ambiente ausentes no servidor do dashboard.`);
-    }
+  const root = asRecord(json);
+  if (!res.ok || root.ok === false) {
+    const msg =
+      typeof root.error === "string"
+        ? root.error
+        : `Falha ao apagar mensagem (${label}, HTTP ${res.status}).`;
+    throw new Error(msg);
+  }
 
-    const url = `${base.replace(/\/+$/, "")}/feedback/messages/${encodeURIComponent(data.id)}`;
-    const res = await fetch(url, {
-      method: "DELETE",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${key}`,
-        "X-API-Key": key,
-        "x-admin-secret": key,
-      },
-    });
-
-    const text = await res.text();
-    let json: unknown = {};
-    try {
-      json = text ? JSON.parse(text) : {};
-    } catch {
-      json = {};
-    }
-
-    const root = asRecord(json);
-    if (!res.ok || root.ok === false) {
-      const msg =
-        typeof root.error === "string"
-          ? root.error
-          : `Falha ao apagar mensagem (${label}, HTTP ${res.status}).`;
-      throw new Error(msg);
-    }
-
-    const out = asRecord(root.data);
-    const deleted = typeof out?.deleted === "boolean" ? out.deleted : true;
-    return { id: typeof out?.id === "string" ? out.id : data.id, deleted };
-  }) as any);
+  const out = asRecord(root.data);
+  const deleted = typeof out?.deleted === "boolean" ? out.deleted : true;
+  return {
+    id: typeof out?.id === "string" ? out.id : input.id,
+    deleted,
+  };
+}

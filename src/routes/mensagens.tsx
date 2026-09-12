@@ -3,10 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  deleteSupportFeedbackMessage,
-  fetchSupportFeedbackMessages,
+  deleteSupportFeedbackHttp,
+  fetchSupportFeedbackHttp,
   type FeedbackMessageRow,
-} from "@/lib/support-feedback-api";
+} from "@/lib/admin-http";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const Route = createFileRoute("/mensagens")({
@@ -38,10 +38,7 @@ function MensagensPage() {
     setError("");
     setWarnings([]);
     try {
-      const payload = (await fetchSupportFeedbackMessages({ data: {} })) as {
-        items: FeedbackMessageRow[];
-        warnings: string[];
-      };
+      const payload = await fetchSupportFeedbackHttp();
       setRows(payload.items);
       setWarnings(payload.warnings ?? []);
     } catch (e) {
@@ -63,7 +60,7 @@ function MensagensPage() {
     setDeletingKey(rowKey(m));
     setError("");
     try {
-      await deleteSupportFeedbackMessage({ data: { source: m.source, id: m.id } });
+      await deleteSupportFeedbackHttp({ source: m.source, id: m.id });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -79,8 +76,7 @@ function MensagensPage() {
           Mensagens
         </h1>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
-          Bugs e sugestões dos apps Wagoo e 2AVendas; cada mensagem indica a origem (API{" "}
-          <span className="text-foreground">/feedback/messages</span> em wag-backend e 2A-back).
+          Bugs e sugestões dos apps Wagoo e 2AVendas.
         </p>
       </div>
 

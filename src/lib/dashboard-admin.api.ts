@@ -1,8 +1,3 @@
-import { z } from "zod";
-import {
-  isDashboardAuthConfigured,
-  isDashboardRequestAuthenticated,
-} from "@/lib/dashboard-auth.server";
 import {
   createTwoAvendasPromoLinkService,
   createWagooPromoLinkService,
@@ -18,6 +13,15 @@ import {
   type AdminSource,
   type AdminUsersPage,
 } from "@/lib/admin-api";
+import {
+  deleteSupportFeedbackMessageService,
+  listSupportFeedbackMessages,
+} from "@/lib/support-feedback-api";
+import {
+  isDashboardAuthConfigured,
+  isDashboardRequestAuthenticated,
+} from "@/lib/dashboard-auth.server";
+import { z } from "zod";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -181,6 +185,25 @@ export async function handleDashboardAdminApi(
       if (request.method === "DELETE") {
         return jsonOk(await deleteTwoAvendasPromoLinkService({ id }));
       }
+    }
+
+    if (
+      pathname === "/api/dashboard/admin/feedback" &&
+      request.method === "GET"
+    ) {
+      return jsonOk(await listSupportFeedbackMessages());
+    }
+
+    const feedbackDeleteMatch = pathname.match(
+      /^\/api\/dashboard\/admin\/feedback\/(wagoo|2avendas)\/([^/]+)$/,
+    );
+    if (feedbackDeleteMatch && request.method === "DELETE") {
+      const source = feedbackDeleteMatch[1] as "wagoo" | "2avendas";
+      const id = decodeURIComponent(feedbackDeleteMatch[2] ?? "");
+      if (!id) return jsonError("id inválido.", 400);
+      return jsonOk(
+        await deleteSupportFeedbackMessageService({ source, id }),
+      );
     }
 
     return jsonError("Rota admin não encontrada.", 404);
