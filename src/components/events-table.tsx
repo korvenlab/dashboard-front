@@ -27,6 +27,8 @@ function StatusBadge({ status }: { status: AppEvent["status"] }) {
 }
 
 export function EventsTable({ events }: { events: AppEvent[] }) {
+  const visible = events.slice(0, 5);
+
   return (
     <div className="border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
@@ -36,8 +38,8 @@ export function EventsTable({ events }: { events: AppEvent[] }) {
         <div className="font-mono text-[10px] uppercase tracking-widest neon-text">live</div>
       </div>
       <div className="divide-y divide-border">
-        {events.length ? (
-          events.map((e) => (
+        {visible.length ? (
+          visible.map((e) => (
             <div
               key={e.id}
               className={cn(
