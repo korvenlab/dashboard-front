@@ -1,6 +1,12 @@
+import { z } from "zod";
 import { getWagooServerEnv } from "@/lib/server-env";
 
 export type FeedbackSource = "wagoo" | "2avendas";
+
+export const deleteFeedbackSchema = z.object({
+  source: z.enum(["wagoo", "2avendas"]),
+  id: z.string().min(1),
+});
 
 export type FeedbackMessageRow = {
   source: FeedbackSource;
