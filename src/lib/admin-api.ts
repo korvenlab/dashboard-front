@@ -1,6 +1,11 @@
 import { protectedServerFn } from "@/lib/protected-server-fn";
 import { z } from "zod";
-import { getTwoAvendasServerEnv, getTwoAvendasBillingAdminSecret, getWagooServerEnv } from "@/lib/server-env";
+import {
+  envGet,
+  getTwoAvendasServerEnv,
+  getTwoAvendasBillingAdminSecret,
+  getWagooServerEnv,
+} from "@/lib/server-env";
 
 export type AdminSource = "wagoo" | "2avendas";
 
@@ -415,13 +420,33 @@ async function callAdminApi(
   body?: unknown,
 ): Promise<unknown> {
   const env = getSourceEnv(source);
-  const base = env.baseUrl?.trim();
-  const key = env.apiKey?.trim();
+  let base = env.baseUrl?.trim();
+  let key = env.apiKey?.trim();
+
+  // Fallback extra (aliases) caso getWagooServerEnv ainda venha vazio no runtime.
+  if (source === "wagoo") {
+    base = base || envGet("WAGOO_API_BASE_URL");
+    if (!key) {
+      for (const name of [
+        "WAGOO_METRICS_API_KEY",
+        "METRICS_API_KEY",
+        "ADMIN_API_SECRET",
+        "WAGOO_API_SECRET",
+      ] as const) {
+        const candidate = envGet(name);
+        if (candidate) {
+          key = candidate;
+          break;
+        }
+      }
+    }
+  }
+
   if (!base || !key) {
     const hint =
       source === "wagoo"
-        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou METRICS_API_KEY / ADMIN_API_SECRET) no ambiente do Korven."
-        : "Defina DASHBOARD_BACKEND_BASE_URL e DASHBOARD_BACKEND_API_KEY (ou TWO_AVENDAS_* / METRICS_API_KEY) no ambiente do Korven.";
+        ? "Defina WAGOO_API_BASE_URL e WAGOO_METRICS_API_KEY (ou METRICS_API_KEY / ADMIN_API_SECRET) no Vercel."
+        : "Defina DASHBOARD_BACKEND_BASE_URL e DASHBOARD_BACKEND_API_KEY (ou TWO_AVENDAS_* / METRICS_API_KEY) no Vercel.";
     throw new Error(`${source}: credenciais ausentes — ${hint}`);
   }
   const url = new URL(`${resolveAdminApiBaseUrl(base, source)}${path}`);
@@ -676,11 +701,352 @@ export const patchWagooUserMultiBarberPlan = protectedServerFn("POST")
     return normalizeUser(root?.data ?? { id: data.id, multiBarberPlan: data.multiBarberPlan });
   }) as any);
 
+export type WagooUserDossier = {
+  product: "wagoo";
+  user: AdminUser | null;
+  access: {
+    hasPaid: boolean;
+    hasAccess: boolean;
+    complimentaryAccessUntil: string | null;
+    complimentaryViaLink: boolean;
+    accessOriginSummary: string;
+    accessOriginDetail: string;
+    subscriptionTier: string | null;
+    multiBarberPlan: boolean;
+    isAiEnabled: boolean;
+    whatsappConfigured: boolean;
+    storeName: string | null;
+    googleConnected: boolean;
+  };
+  counts: {
+    barbeiros: number;
+    promoRedemptions: number;
+    feedbackMessages: number;
+    appointments: number;
+    assets: number;
+  };
+  promoRedemptions: Array<{
+    id: string;
+    promoLinkId: string;
+    redeemedAt: string | null;
+    code: string | null;
+    label: string | null;
+    complimentaryDays: number | null;
+  }>;
+  feedbackMessages: Array<{
+    id: string;
+    createdAt: string | null;
+    body: string;
+    userEmail: string | null;
+    userFullName: string | null;
+  }>;
+  barbeiros: Array<{ id: string; name: string; createdAt: string | null }>;
+  appointments: Array<{
+    id: string;
+    status: string | null;
+    startsAt: string | null;
+    createdAt: string | null;
+    clientName: string | null;
+  }>;
+  assets: Array<{ id: string; url: string; createdAt: string | null }>;
+  timeline: Array<{
+    at: string;
+    kind: string;
+    title: string;
+    detail: string | null;
+  }>;
+  warnings: string[];
+};
+
+export async function fetchWagooUserDossier(
+  externalUserId: string,
+): Promise<WagooUserDossier> {
+  try {
+    const raw = await callAdminApi(
+      "wagoo",
+      "GET",
+      `/api/admin/users/${encodeURIComponent(externalUserId)}/dossier`,
+    );
+    return parseWagooDossierPayload(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Render ainda pode estar sem o endpoint novo — monta dossiê com rotas já expostas.
+    if (
+      /endpoint admin não encontrado/i.test(message) ||
+      /not found/i.test(message) ||
+      /\b404\b/.test(message)
+    ) {
+      return buildWagooDossierFallback(externalUserId, message);
+    }
+    throw error;
+  }
+}
+
+function parseWagooDossierPayload(raw: unknown): WagooUserDossier {
+  const root = asRecord(raw);
+  const data = asRecord(root?.data) ?? {};
+  const access = asRecord(data.access) ?? {};
+  const counts = asRecord(data.counts) ?? {};
+  return {
+    product: "wagoo",
+    user: normalizeUser(data.user),
+    access: {
+      hasPaid: asBool(access.hasPaid, false),
+      hasAccess: asBool(access.hasAccess, false),
+      complimentaryAccessUntil:
+        asString(access.complimentaryAccessUntil) ?? null,
+      complimentaryViaLink: asBool(access.complimentaryViaLink, false),
+      accessOriginSummary: asString(access.accessOriginSummary) ?? "—",
+      accessOriginDetail: asString(access.accessOriginDetail) ?? "—",
+      subscriptionTier: asString(access.subscriptionTier),
+      multiBarberPlan: asBool(access.multiBarberPlan, false),
+      isAiEnabled: asBool(access.isAiEnabled, false),
+      whatsappConfigured: asBool(access.whatsappConfigured, false),
+      storeName: asString(access.storeName),
+      googleConnected: asBool(access.googleConnected, false),
+    },
+    counts: {
+      barbeiros: typeof counts.barbeiros === "number" ? counts.barbeiros : 0,
+      promoRedemptions:
+        typeof counts.promoRedemptions === "number"
+          ? counts.promoRedemptions
+          : 0,
+      feedbackMessages:
+        typeof counts.feedbackMessages === "number"
+          ? counts.feedbackMessages
+          : 0,
+      appointments:
+        typeof counts.appointments === "number" ? counts.appointments : 0,
+      assets: typeof counts.assets === "number" ? counts.assets : 0,
+    },
+    promoRedemptions: Array.isArray(data.promoRedemptions)
+      ? (data.promoRedemptions as WagooUserDossier["promoRedemptions"])
+      : [],
+    feedbackMessages: Array.isArray(data.feedbackMessages)
+      ? (data.feedbackMessages as WagooUserDossier["feedbackMessages"])
+      : [],
+    barbeiros: Array.isArray(data.barbeiros)
+      ? (data.barbeiros as WagooUserDossier["barbeiros"])
+      : [],
+    appointments: Array.isArray(data.appointments)
+      ? (data.appointments as WagooUserDossier["appointments"])
+      : [],
+    assets: Array.isArray(data.assets)
+      ? (data.assets as WagooUserDossier["assets"])
+      : [],
+    timeline: Array.isArray(data.timeline)
+      ? (data.timeline as WagooUserDossier["timeline"])
+      : [],
+    warnings: Array.isArray(data.warnings)
+      ? data.warnings.filter(
+          (w): w is string =>
+            typeof w === "string" &&
+            !/profiles\.(is_active|deleted_at|role)\b/i.test(w),
+        )
+      : [],
+  };
+}
+
+async function fetchWagooFeedbackForUser(input: {
+  userId: string;
+  email: string | null;
+}): Promise<WagooUserDossier["feedbackMessages"]> {
+  const env = getWagooServerEnv();
+  const base = env.apiBaseUrl?.trim();
+  const key = env.metricsApiKey?.trim();
+  if (!base || !key) return [];
+  const rootBase = resolveAdminApiBaseUrl(base, "wagoo");
+  try {
+    const res = await fetch(
+      `${rootBase}/feedback/messages?limit=300&_ts=${Date.now()}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${key}`,
+          "X-API-Key": key,
+          "x-admin-secret": key,
+        },
+        cache: "no-store",
+      },
+    );
+    const json = (await res.json().catch(() => ({}))) as unknown;
+    const root = asRecord(json);
+    if (!res.ok || root?.ok === false) return [];
+    const rows = Array.isArray(root?.data) ? root.data : [];
+    const email = input.email?.toLowerCase() ?? null;
+    return rows
+      .map((row) => {
+        const r = asRecord(row);
+        if (!r) return null;
+        const id = asString(r.id);
+        const body = asString(r.body);
+        const createdAt = asString(r.created_at);
+        const userId = asString(r.user_id);
+        const userEmail = asString(r.user_email)?.toLowerCase() ?? null;
+        if (!id || !body) return null;
+        const match =
+          userId === input.userId ||
+          (email != null && userEmail != null && userEmail === email);
+        if (!match) return null;
+        return {
+          id,
+          createdAt,
+          body,
+          userEmail: asString(r.user_email),
+          userFullName: asString(r.user_full_name),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+  } catch {
+    return [];
+  }
+}
+
+async function buildWagooDossierFallback(
+  externalUserId: string,
+  reason: string,
+): Promise<WagooUserDossier> {
+  const warnings = [
+    `Dossiê completo indisponível no Wagoo (${reason}). Usando rotas legadas.`,
+  ];
+  let user: AdminUser | null = null;
+  try {
+    const raw = await callAdminApi(
+      "wagoo",
+      "GET",
+      `/api/admin/users/${encodeURIComponent(externalUserId)}`,
+    );
+    const root = asRecord(raw);
+    user = normalizeUser(root?.data ?? null);
+  } catch (e) {
+    warnings.push(
+      `users/:id: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  let assets: WagooUserDossier["assets"] = [];
+  try {
+    const raw = await callAdminApi(
+      "wagoo",
+      "GET",
+      `/api/admin/users/${encodeURIComponent(externalUserId)}/assets`,
+    );
+    const root = asRecord(raw);
+    const data = asRecord(root?.data) ?? {};
+    const items = Array.isArray(data.items) ? data.items : [];
+    assets = items
+      .map((item) => {
+        const r = asRecord(item);
+        if (!r) return null;
+        const id = asString(r.id);
+        const url = asString(r.url) ?? asString(r.createdAt) ?? "";
+        if (!id) return null;
+        return {
+          id,
+          url: asString(r.url) ?? "",
+          createdAt: asString(r.createdAt) ?? asString(r.created_at),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+  } catch (e) {
+    warnings.push(
+      `assets: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  const feedbackMessages = await fetchWagooFeedbackForUser({
+    userId: externalUserId,
+    email: user?.email ?? null,
+  });
+
+  const timeline: WagooUserDossier["timeline"] = [];
+  if (user?.createdAt) {
+    timeline.push({
+      at: user.createdAt,
+      kind: "account",
+      title: "Conta criada no Wagoo",
+      detail: user.email,
+    });
+  }
+  if (user?.lastSignInAt) {
+    timeline.push({
+      at: user.lastSignInAt,
+      kind: "login",
+      title: "Último login",
+      detail: null,
+    });
+  }
+  if (user?.complimentaryViaLink) {
+    timeline.push({
+      at: user.complimentary_access_until || user.createdAt || new Date().toISOString(),
+      kind: "promo",
+      title: "Já resgatou link de cortesia",
+      detail: user.accessOriginDetail ?? user.accessOriginSummary ?? null,
+    });
+  }
+  for (const m of feedbackMessages) {
+    if (!m.createdAt) continue;
+    timeline.push({
+      at: m.createdAt,
+      kind: "feedback",
+      title: "Mensagem de suporte/feedback",
+      detail: m.body.slice(0, 160),
+    });
+  }
+  timeline.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  return {
+    product: "wagoo",
+    user,
+    access: {
+      hasPaid: user?.hasPaid === true,
+      hasAccess: user?.hasAccess === true,
+      complimentaryAccessUntil: user?.complimentary_access_until ?? null,
+      complimentaryViaLink: user?.complimentaryViaLink === true,
+      accessOriginSummary: user?.accessOriginSummary ?? "—",
+      accessOriginDetail: user?.accessOriginDetail ?? "—",
+      subscriptionTier: user?.subscriptionTier ?? null,
+      multiBarberPlan: user?.multiBarberPlan === true,
+      isAiEnabled: false,
+      whatsappConfigured: false,
+      storeName: user?.name ?? null,
+      googleConnected: false,
+    },
+    counts: {
+      barbeiros: user?.barbeirosCount ?? 0,
+      promoRedemptions: user?.complimentaryViaLink ? 1 : 0,
+      feedbackMessages: feedbackMessages.length,
+      appointments: 0,
+      assets: assets.length,
+    },
+    promoRedemptions: user?.complimentaryViaLink
+      ? [
+          {
+            id: `legacy-promo-${externalUserId}`,
+            promoLinkId: "",
+            redeemedAt: user.complimentary_access_until ?? user.createdAt,
+            code: null,
+            label: "Resgate registado (detalhe do link indisponível nesta versão)",
+            complimentaryDays: null,
+          },
+        ]
+      : [],
+    feedbackMessages,
+    barbeiros: [],
+    appointments: [],
+    assets,
+    timeline,
+    warnings,
+  };
+}
+
 export type WagooPromoLink = {
   id: string;
   code: string;
   label: string | null;
   complimentary_days: number;
+  /** Plano liberado no resgate: agenda_web | basic | pro | pro_plus */
+  plan_tier?: string | null;
   max_redemptions: number | null;
   redemption_count: number;
   expires_at: string | null;
@@ -689,6 +1055,29 @@ export type WagooPromoLink = {
   signup_url?: string;
 };
 
+const createPromoSchema = z.object({
+  source: z.literal("wagoo"),
+  label: z.string().max(200).optional(),
+  complimentary_days: z.number().int().min(1).max(730).optional(),
+  plan_tier: z
+    .enum(["agenda_web", "basic", "pro", "pro_plus"])
+    .optional(),
+  max_redemptions: z.number().int().min(1).optional().nullable(),
+  expires_at: z.string().optional().nullable(),
+});
+
+const patchPromoSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+  is_active: z.boolean(),
+});
+
+const deletePromoSchema = z.object({
+  source: z.literal("wagoo"),
+  id: z.string().min(1),
+});
+
+/** Serviço HTTP (Nitro) — evita TanStack server fns sem env no Vercel. */
 export async function listWagooPromoLinks(): Promise<WagooPromoLink[]> {
   const raw = await callAdminApi("wagoo", "GET", "/api/admin/wagoo/promo-links");
   const root = asRecord(raw);
@@ -697,27 +1086,20 @@ export async function listWagooPromoLinks(): Promise<WagooPromoLink[]> {
   return itemsRaw as WagooPromoLink[];
 }
 
-export async function createWagooPromoLinkService(input: {
-  label?: string;
-  complimentary_days?: number;
-  max_redemptions?: number | null;
-  expires_at?: string | null;
-}): Promise<WagooPromoLink> {
+export async function createWagooPromoLinkService(
+  input: Omit<z.infer<typeof createPromoSchema>, "source">,
+): Promise<WagooPromoLink> {
   const body: Record<string, unknown> = {};
   if (input.label != null) body.label = input.label;
   if (input.complimentary_days != null) {
     body.complimentary_days = input.complimentary_days;
   }
+  if (input.plan_tier != null) body.plan_tier = input.plan_tier;
   if (input.max_redemptions !== undefined) {
     body.max_redemptions = input.max_redemptions;
   }
   if (input.expires_at !== undefined) body.expires_at = input.expires_at;
-  const raw = await callAdminApi(
-    "wagoo",
-    "POST",
-    "/api/admin/wagoo/promo-links",
-    body,
-  );
+  const raw = await callAdminApi("wagoo", "POST", "/api/admin/wagoo/promo-links", body);
   const root = asRecord(raw);
   return (root?.data ?? {}) as WagooPromoLink;
 }
@@ -736,66 +1118,53 @@ export async function patchWagooPromoLinkActiveService(input: {
   return (root?.data ?? {}) as WagooPromoLink;
 }
 
-export async function deleteWagooPromoLinkService(input: {
-  id: string;
-}): Promise<{ id: string; deleted: boolean }> {
+export async function deleteWagooPromoLinkService(
+  id: string,
+): Promise<{ id: string; deleted: boolean }> {
   const raw = await callAdminApi(
     "wagoo",
     "DELETE",
-    `/api/admin/wagoo/promo-links/${encodeURIComponent(input.id)}`,
+    `/api/admin/wagoo/promo-links/${encodeURIComponent(id)}`,
   );
   const root = asRecord(raw);
   const out = asRecord(root?.data) ?? {};
   return {
-    id: asString(out.id) ?? input.id,
+    id: asString(out.id) ?? id,
     deleted: asBool(out.deleted, true),
   };
 }
 
+/** @deprecated Prefer HTTP `/api/dashboard/admin/wagoo/promo-links`. */
 export const fetchWagooPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({ source: z.literal("wagoo") }))
-  .handler((async (): Promise<WagooPromoLink[]> => {
-    return listWagooPromoLinks();
-  }) as any);
+  .handler((async (): Promise<WagooPromoLink[]> => listWagooPromoLinks()) as any);
 
-const createPromoSchema = z.object({
-  source: z.literal("wagoo"),
-  label: z.string().max(200).optional(),
-  complimentary_days: z.number().int().min(1).max(730).optional(),
-  max_redemptions: z.number().int().min(1).optional().nullable(),
-  expires_at: z.string().optional().nullable(),
-});
-
+/** @deprecated Prefer HTTP. */
 export const createWagooPromoLink = protectedServerFn("POST")
   .inputValidator(createPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createPromoSchema> };
-    return createWagooPromoLinkService(data);
+    const { source: _source, ...rest } = data;
+    return createWagooPromoLinkService(rest);
   }) as any);
 
-const patchPromoSchema = z.object({
-  source: z.literal("wagoo"),
-  id: z.string().min(1),
-  is_active: z.boolean(),
-});
-
+/** @deprecated Prefer HTTP. */
 export const patchWagooPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchPromoSchema)
   .handler((async (ctx: unknown): Promise<WagooPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchPromoSchema> };
-    return patchWagooPromoLinkActiveService(data);
+    return patchWagooPromoLinkActiveService({
+      id: data.id,
+      is_active: data.is_active,
+    });
   }) as any);
 
-const deletePromoSchema = z.object({
-  source: z.literal("wagoo"),
-  id: z.string().min(1),
-});
-
+/** @deprecated Prefer HTTP. */
 export const deleteWagooPromoLink = protectedServerFn("POST")
   .inputValidator(deletePromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deletePromoSchema> };
-    return deleteWagooPromoLinkService(data);
+    return deleteWagooPromoLinkService(data.id);
   }) as any);
 
 export const deleteAdminUser = protectedServerFn("POST")
@@ -909,64 +1278,13 @@ async function twoAvendasBillingRequest(
   return root ?? {};
 }
 
-export async function listTwoAvendasPromoLinks(): Promise<TwoAvendasPromoLink[]> {
-  const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
-  const payload = asRecord(root?.data) ?? {};
-  const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
-  return itemsRaw as TwoAvendasPromoLink[];
-}
-
-export async function createTwoAvendasPromoLinkService(input: {
-  label?: string;
-  complimentary_days?: number;
-  max_redemptions?: number | null;
-}): Promise<TwoAvendasPromoLink> {
-  const body: Record<string, unknown> = {};
-  if (input.label != null) body.label = input.label;
-  if (input.complimentary_days != null) {
-    body.complimentary_days = input.complimentary_days;
-  }
-  if (input.max_redemptions !== undefined) {
-    body.max_redemptions = input.max_redemptions;
-  }
-  const root = await twoAvendasBillingRequest(
-    "POST",
-    "/api/billing/promo-links",
-    body,
-  );
-  return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
-}
-
-export async function patchTwoAvendasPromoLinkActiveService(input: {
-  id: string;
-  is_active: boolean;
-}): Promise<TwoAvendasPromoLink> {
-  const root = await twoAvendasBillingRequest(
-    "PATCH",
-    `/api/billing/promo-links/${encodeURIComponent(input.id)}`,
-    { is_active: input.is_active },
-  );
-  return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
-}
-
-export async function deleteTwoAvendasPromoLinkService(input: {
-  id: string;
-}): Promise<{ id: string; deleted: boolean }> {
-  const root = await twoAvendasBillingRequest(
-    "DELETE",
-    `/api/billing/promo-links/${encodeURIComponent(input.id)}`,
-  );
-  const out = asRecord(root?.data) ?? {};
-  return {
-    id: asString(out.id) ?? input.id,
-    deleted: asBool(out.deleted, true),
-  };
-}
-
 export const fetchTwoAvendasPromoLinks = protectedServerFn("GET")
   .inputValidator(z.object({}))
   .handler((async (): Promise<TwoAvendasPromoLink[]> => {
-    return listTwoAvendasPromoLinks();
+    const root = await twoAvendasBillingRequest("GET", "/api/billing/promo-links");
+    const payload = asRecord(root?.data) ?? {};
+    const itemsRaw = Array.isArray(payload.items) ? payload.items : [];
+    return itemsRaw as TwoAvendasPromoLink[];
   }) as any);
 
 const createTwoAvendasPromoSchema = z.object({
@@ -979,7 +1297,12 @@ export const createTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(createTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof createTwoAvendasPromoSchema> };
-    return createTwoAvendasPromoLinkService(data);
+    const body: Record<string, unknown> = {};
+    if (data.label != null) body.label = data.label;
+    if (data.complimentary_days != null) body.complimentary_days = data.complimentary_days;
+    if (data.max_redemptions !== undefined) body.max_redemptions = data.max_redemptions;
+    const root = await twoAvendasBillingRequest("POST", "/api/billing/promo-links", body);
+    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
   }) as any);
 
 const patchTwoAvendasPromoSchema = z.object({
@@ -991,7 +1314,12 @@ export const patchTwoAvendasPromoLinkActive = protectedServerFn("POST")
   .inputValidator(patchTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<TwoAvendasPromoLink> => {
     const { data } = ctx as { data: z.infer<typeof patchTwoAvendasPromoSchema> };
-    return patchTwoAvendasPromoLinkActiveService(data);
+    const root = await twoAvendasBillingRequest(
+      "PATCH",
+      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
+      { is_active: data.is_active },
+    );
+    return (asRecord(root?.data) ?? {}) as TwoAvendasPromoLink;
   }) as any);
 
 const deleteTwoAvendasPromoSchema = z.object({
@@ -1002,5 +1330,13 @@ export const deleteTwoAvendasPromoLink = protectedServerFn("POST")
   .inputValidator(deleteTwoAvendasPromoSchema)
   .handler((async (ctx: unknown): Promise<{ id: string; deleted: boolean }> => {
     const { data } = ctx as { data: z.infer<typeof deleteTwoAvendasPromoSchema> };
-    return deleteTwoAvendasPromoLinkService(data);
+    const root = await twoAvendasBillingRequest(
+      "DELETE",
+      `/api/billing/promo-links/${encodeURIComponent(data.id)}`,
+    );
+    const out = asRecord(root?.data) ?? {};
+    return {
+      id: asString(out.id) ?? data.id,
+      deleted: asBool(out.deleted, true),
+    };
   }) as any);

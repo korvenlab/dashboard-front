@@ -1,27 +1,24 @@
+import { z } from "zod";
 import {
-  createTwoAvendasPromoLinkService,
+  isDashboardAuthConfigured,
+  isDashboardRequestAuthenticated,
+} from "@/lib/dashboard-auth.server";
+import {
   createWagooPromoLinkService,
-  deleteTwoAvendasPromoLinkService,
   deleteWagooPromoLinkService,
   listAdminRoles,
   listAdminUsers,
-  listTwoAvendasPromoLinks,
   listWagooPromoLinks,
-  patchTwoAvendasPromoLinkActiveService,
   patchWagooPromoLinkActiveService,
   type AdminRolesResult,
   type AdminSource,
   type AdminUsersPage,
 } from "@/lib/admin-api";
 import {
+  deleteFeedbackSchema,
   deleteSupportFeedbackMessageService,
   listSupportFeedbackMessages,
 } from "@/lib/support-feedback-api";
-import {
-  isDashboardAuthConfigured,
-  isDashboardRequestAuthenticated,
-} from "@/lib/dashboard-auth.server";
-import { z } from "zod";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -48,21 +45,13 @@ function jsonError(message: string, status = 500): Response {
   });
 }
 
-const createPromoBodySchema = z.object({
-  label: z.string().max(200).optional(),
-  complimentary_days: z.number().int().min(1).max(730).optional(),
-  max_redemptions: z.number().int().min(1).optional().nullable(),
-  expires_at: z.string().optional().nullable(),
-});
+/** Lista roles via rota HTTP (mesmo runtime que métricas Stripe). */
+async function listAdminRolesHttp(
+  source: AdminSource,
+): Promise<AdminRolesResult> {
+  return listAdminRoles(source);
+}
 
-const patchPromoBodySchema = z.object({
-  is_active: z.boolean(),
-});
-
-/**
- * Admin HTTP — mesmo runtime Nitro de `/api/dashboard/metrics`.
- * Promo links não usam createServerFn (env vazia no browser).
- */
 export async function handleDashboardAdminApi(
   request: Request,
 ): Promise<Response | null> {
@@ -80,137 +69,150 @@ export async function handleDashboardAdminApi(
     return unauthorized();
   }
 
-  try {
-    if (pathname === "/api/dashboard/admin/users" && request.method === "GET") {
-      const parsed = z
-        .object({
-          source: sourceSchema,
-          search: z.string().optional(),
-          page: z.coerce.number().int().min(1).max(1000).default(1),
-          limit: z.coerce.number().int().min(1).max(100).default(20),
-        })
-        .safeParse({
-          source: url.searchParams.get("source") ?? undefined,
-          search: url.searchParams.get("search") ?? undefined,
-          page: url.searchParams.get("page") ?? 1,
-          limit: url.searchParams.get("limit") ?? 20,
-        });
+  if (pathname === "/api/dashboard/admin/users" && request.method === "GET") {
+    const parsed = z
+      .object({
+        source: sourceSchema,
+        search: z.string().optional(),
+        page: z.coerce.number().int().min(1).max(1000).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+      })
+      .safeParse({
+        source: url.searchParams.get("source") ?? undefined,
+        search: url.searchParams.get("search") ?? undefined,
+        page: url.searchParams.get("page") ?? 1,
+        limit: url.searchParams.get("limit") ?? 20,
+      });
 
-      if (!parsed.success) {
-        return jsonError("Parâmetros inválidos.", 400);
-      }
+    if (!parsed.success) {
+      return jsonError("Parâmetros inválidos.", 400);
+    }
 
+    try {
       const page = await listAdminUsers(parsed.data);
       return jsonOk(page);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
     }
-
-    if (pathname === "/api/dashboard/admin/roles" && request.method === "GET") {
-      const source = sourceSchema.safeParse(url.searchParams.get("source"));
-      if (!source.success) {
-        return jsonError("Parâmetro source inválido.", 400);
-      }
-      const roles = await listAdminRoles(source.data);
-      return jsonOk(roles);
-    }
-
-    if (
-      pathname === "/api/dashboard/admin/wagoo/promo-links" &&
-      request.method === "GET"
-    ) {
-      return jsonOk(await listWagooPromoLinks());
-    }
-
-    if (
-      pathname === "/api/dashboard/admin/wagoo/promo-links" &&
-      request.method === "POST"
-    ) {
-      const body = createPromoBodySchema.safeParse(await request.json());
-      if (!body.success) return jsonError("Payload inválido.", 400);
-      return jsonOk(await createWagooPromoLinkService(body.data), 201);
-    }
-
-    const wagooPromoMatch = pathname.match(
-      /^\/api\/dashboard\/admin\/wagoo\/promo-links\/([^/]+)$/,
-    );
-    if (wagooPromoMatch) {
-      const id = decodeURIComponent(wagooPromoMatch[1] ?? "");
-      if (!id) return jsonError("id inválido.", 400);
-      if (request.method === "PATCH") {
-        const body = patchPromoBodySchema.safeParse(await request.json());
-        if (!body.success) return jsonError("Payload inválido.", 400);
-        return jsonOk(
-          await patchWagooPromoLinkActiveService({
-            id,
-            is_active: body.data.is_active,
-          }),
-        );
-      }
-      if (request.method === "DELETE") {
-        return jsonOk(await deleteWagooPromoLinkService({ id }));
-      }
-    }
-
-    if (
-      pathname === "/api/dashboard/admin/2avendas/promo-links" &&
-      request.method === "GET"
-    ) {
-      return jsonOk(await listTwoAvendasPromoLinks());
-    }
-
-    if (
-      pathname === "/api/dashboard/admin/2avendas/promo-links" &&
-      request.method === "POST"
-    ) {
-      const body = createPromoBodySchema.safeParse(await request.json());
-      if (!body.success) return jsonError("Payload inválido.", 400);
-      return jsonOk(await createTwoAvendasPromoLinkService(body.data), 201);
-    }
-
-    const twoPromoMatch = pathname.match(
-      /^\/api\/dashboard\/admin\/2avendas\/promo-links\/([^/]+)$/,
-    );
-    if (twoPromoMatch) {
-      const id = decodeURIComponent(twoPromoMatch[1] ?? "");
-      if (!id) return jsonError("id inválido.", 400);
-      if (request.method === "PATCH") {
-        const body = patchPromoBodySchema.safeParse(await request.json());
-        if (!body.success) return jsonError("Payload inválido.", 400);
-        return jsonOk(
-          await patchTwoAvendasPromoLinkActiveService({
-            id,
-            is_active: body.data.is_active,
-          }),
-        );
-      }
-      if (request.method === "DELETE") {
-        return jsonOk(await deleteTwoAvendasPromoLinkService({ id }));
-      }
-    }
-
-    if (
-      pathname === "/api/dashboard/admin/feedback" &&
-      request.method === "GET"
-    ) {
-      return jsonOk(await listSupportFeedbackMessages());
-    }
-
-    const feedbackDeleteMatch = pathname.match(
-      /^\/api\/dashboard\/admin\/feedback\/(wagoo|2avendas)\/([^/]+)$/,
-    );
-    if (feedbackDeleteMatch && request.method === "DELETE") {
-      const source = feedbackDeleteMatch[1] as "wagoo" | "2avendas";
-      const id = decodeURIComponent(feedbackDeleteMatch[2] ?? "");
-      if (!id) return jsonError("id inválido.", 400);
-      return jsonOk(
-        await deleteSupportFeedbackMessageService({ source, id }),
-      );
-    }
-
-    return jsonError("Rota admin não encontrada.", 404);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return jsonError(msg, 502);
   }
+
+  if (pathname === "/api/dashboard/admin/roles" && request.method === "GET") {
+    const source = sourceSchema.safeParse(url.searchParams.get("source"));
+    if (!source.success) {
+      return jsonError("Parâmetro source inválido.", 400);
+    }
+    try {
+      const roles = await listAdminRolesHttp(source.data);
+      return jsonOk(roles);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
+    }
+  }
+
+  if (
+    pathname === "/api/dashboard/admin/wagoo/promo-links" &&
+    request.method === "GET"
+  ) {
+    try {
+      const items = await listWagooPromoLinks();
+      return jsonOk({ items });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
+    }
+  }
+
+  if (
+    pathname === "/api/dashboard/admin/wagoo/promo-links" &&
+    request.method === "POST"
+  ) {
+    const body = await request.json().catch(() => null);
+    const parsed = z
+      .object({
+        label: z.string().max(200).optional(),
+        complimentary_days: z.number().int().min(1).max(730).optional(),
+        plan_tier: z
+          .enum(["agenda_web", "basic", "pro", "pro_plus"])
+          .optional(),
+        max_redemptions: z.number().int().min(1).optional().nullable(),
+        expires_at: z.string().optional().nullable(),
+      })
+      .safeParse(body);
+    if (!parsed.success) {
+      return jsonError("Body inválido.", 400);
+    }
+    try {
+      const item = await createWagooPromoLinkService(parsed.data);
+      return jsonOk(item, 201);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
+    }
+  }
+
+  const promoIdMatch = pathname.match(
+    /^\/api\/dashboard\/admin\/wagoo\/promo-links\/([^/]+)$/,
+  );
+  if (promoIdMatch) {
+    const id = decodeURIComponent(promoIdMatch[1] ?? "");
+    if (!id) return jsonError("ID inválido.", 400);
+
+    if (request.method === "PATCH") {
+      const body = await request.json().catch(() => null);
+      const parsed = z.object({ is_active: z.boolean() }).safeParse(body);
+      if (!parsed.success) return jsonError("Body inválido.", 400);
+      try {
+        const item = await patchWagooPromoLinkActiveService({
+          id,
+          is_active: parsed.data.is_active,
+        });
+        return jsonOk(item);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return jsonError(msg, 502);
+      }
+    }
+
+    if (request.method === "DELETE") {
+      try {
+        const out = await deleteWagooPromoLinkService(id);
+        return jsonOk(out);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return jsonError(msg, 502);
+      }
+    }
+  }
+
+  if (pathname === "/api/dashboard/admin/feedback" && request.method === "GET") {
+    try {
+      const payload = await listSupportFeedbackMessages();
+      return jsonOk(payload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
+    }
+  }
+
+  if (
+    pathname === "/api/dashboard/admin/feedback" &&
+    request.method === "DELETE"
+  ) {
+    const body = await request.json().catch(() => null);
+    const parsed = deleteFeedbackSchema.safeParse(body);
+    if (!parsed.success) return jsonError("Body inválido.", 400);
+    try {
+      const out = await deleteSupportFeedbackMessageService(parsed.data);
+      return jsonOk(out);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return jsonError(msg, 502);
+    }
+  }
+
+  return jsonError("Rota admin não encontrada.", 404);
 }
 
-export type { AdminUsersPage, AdminRolesResult, AdminSource };
+export type { AdminUsersPage };
