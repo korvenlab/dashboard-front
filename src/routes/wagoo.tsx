@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { KpiCard } from "@/components/kpi-card";
 import { RevenueAreaChart } from "@/components/metrics-charts";
@@ -12,8 +12,12 @@ import {
   deleteWagooPromoLinkHttp,
   fetchWagooPromoLinksHttp,
   patchWagooPromoLinkActiveHttp,
+  type WagooPromoLink,
 } from "@/lib/admin-http";
-import type { WagooPromoLink } from "@/lib/admin-api";
+import {
+  fetchRecentPaymentsHttp,
+  type CentralPaymentHttpRow,
+} from "@/lib/central-http";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,7 +123,10 @@ function WagooPromoLinksPanel() {
   async function setActive(id: string, is_active: boolean) {
     setMessage("");
     try {
-      await patchWagooPromoLinkActiveHttp({ id, is_active });
+      await patchWagooPromoLinkActiveHttp({
+        id,
+        is_active,
+      });
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -137,7 +144,7 @@ function WagooPromoLinksPanel() {
     setMessage("");
     setDeletingId(row.id);
     try {
-      await deleteWagooPromoLinkHttp(row.id);
+      await deleteWagooPromoLinkHttp({ id: row.id });
       await load();
       setMessage("Link removido.");
     } catch (e) {
@@ -149,17 +156,18 @@ function WagooPromoLinksPanel() {
 
   return (
     <div className="rounded border border-border/80 bg-card/40 p-4 font-mono text-xs">
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground">
-          Links de cortesia (cadastro)
-        </h2>
-        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
-          Cada link aponta para o login Wagoo com{" "}
-          <code className="text-[10px]">?wagoo_promo=código</code>. Após o
-          Google, o usuário recebe o <span className="text-foreground">plano</span> e o
-          tempo de acesso que você escolher abaixo (sem cobrança), enquanto o
-          código estiver válido.
-        </p>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground">
+            Links de cortesia (cadastro)
+          </h2>
+          <p className="mt-1 text-[11px] text-muted-foreground max-w-2xl leading-relaxed">
+            Cada link aponta para o login Wagoo com{" "}
+            <code className="text-[10px]">?wagoo_promo=código</code>. Após o
+            Google, o usuário recebe o plano e o tempo de acesso que você
+            escolher abaixo (sem cobrança), enquanto o código estiver válido.
+          </p>
+        </div>
       </div>
 
       <div className="mt-4 space-y-4 border-t border-border/60 pt-4">
@@ -394,6 +402,115 @@ function WagooPromoLinksPanel() {
   );
 }
 
+function providerLabel(provider: CentralPaymentHttpRow["provider"]) {
+  if (provider === "mercadopago") return "Mercado Pago";
+  if (provider === "stripe") return "Stripe";
+  return "—";
+}
+
+function formatMoney(cents: number | null, currency: string | null) {
+  if (cents == null) return "—";
+  const code = (currency || "BRL").toUpperCase();
+  try {
+    return (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: code,
+    });
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${code}`;
+  }
+}
+
+function WagooPaymentsPanel() {
+  const [items, setItems] = useState<CentralPaymentHttpRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setMessage("");
+    try {
+      setItems(await fetchRecentPaymentsHttp({ product: "wagoo", limit: 40 }));
+    } catch (e) {
+      setItems([]);
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const t = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  return (
+    <div className="rounded border border-border/80 bg-card/40 p-4 font-mono text-xs">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground">
+            Pagamentos · ingest Supabase
+          </h2>
+          <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+            Stripe (planos Wagoo) e Mercado Pago (sinais/clube) via Edge ingest.
+            Também geram notificações no sino do topo.
+          </p>
+        </div>
+      </div>
+
+      {message ? (
+        <p className="mt-3 text-[11px] text-destructive">{message}</p>
+      ) : null}
+
+      <div className="mt-4 max-h-72 overflow-auto rounded border border-border/60">
+        <table className="w-full border-collapse text-left text-[11px]">
+          <thead className="sticky top-0 bg-muted/80">
+            <tr>
+              <th className="p-2 font-medium">Quando</th>
+              <th className="p-2 font-medium">Provedor</th>
+              <th className="p-2 font-medium">Status</th>
+              <th className="p-2 font-medium">Valor</th>
+              <th className="p-2 font-medium">Tipo</th>
+              <th className="p-2 font-medium">ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => (
+              <tr key={row.id} className="border-t border-border/50">
+                <td className="p-2 align-top whitespace-nowrap">
+                  {new Date(row.created_at).toLocaleString("pt-BR")}
+                </td>
+                <td className="p-2 align-top">{providerLabel(row.provider)}</td>
+                <td className="p-2 align-top">
+                  {row.status ?? row.event_type ?? "—"}
+                </td>
+                <td className="p-2 align-top">
+                  {formatMoney(row.amount_cents, row.currency)}
+                </td>
+                <td className="p-2 align-top">
+                  {row.kind || row.plan || "—"}
+                </td>
+                <td className="p-2 align-top break-all max-w-[180px]">
+                  {row.object_id ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {!items.length && !loading ? (
+              <tr>
+                <td colSpan={6} className="p-3 text-muted-foreground">
+                  Nenhum pagamento no central ainda (Stripe legado ou Mercado
+                  Pago após o primeiro webhook).
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function WagooPage() {
   const { dashboard } = useKorvenDashboard();
 
@@ -425,18 +542,19 @@ function WagooPage() {
     events.length > 0;
 
   return (
-    <div className="space-y-5 p-4 sm:space-y-6 sm:p-6 md:p-8">
+    <div className="space-y-6 p-6">
       <div>
-        <h1 className="font-mono text-lg font-semibold uppercase tracking-[0.18em] sm:text-xl sm:tracking-[0.2em]">
+        <h1 className="font-mono text-xl font-semibold uppercase tracking-[0.2em]">
           Wagoo
         </h1>
         <p className="mt-1 max-w-3xl font-mono text-xs leading-relaxed text-muted-foreground">
-          KPIs, receita e links de cortesia. Usuários e pagamento ficam no
-          Admin.
+          KPIs, receita, eventos e pagamentos (Stripe SaaS + Mercado Pago
+          sinais/clube). Notificações no sino.
         </p>
       </div>
 
       <WagooPromoLinksPanel />
+      <WagooPaymentsPanel />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {kpis.map((k) => (
           <KpiCard key={k.label} {...k} />
