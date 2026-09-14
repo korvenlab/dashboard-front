@@ -246,8 +246,8 @@ export async function fetchCentralDeploysHttp(): Promise<CentralDeploysResponse>
 }
 
 export async function mutateNotificationHttp(input: {
-  id: string;
-  action: "read" | "archive";
+  action: "read" | "archive" | "read_all" | "archive_all";
+  id?: string;
 }) {
   return centralFetch<{ ok: true }>("/api/dashboard/central/notifications", {
     method: "POST",

@@ -601,14 +601,38 @@ export async function listMpCentralMonitoring(limit = 40): Promise<{
 }
 
 export async function mutateNotificationService(input: {
-  id: string;
-  action: "read" | "archive";
+  action: "read" | "archive" | "read_all" | "archive_all";
+  id?: string;
 }) {
+  const client = getSupabaseServerClient({ admin: true });
+  const now = new Date().toISOString();
+
+  if (input.action === "read_all") {
+    const { error } = await client
+      .from("notifications")
+      .update({ read_at: now })
+      .is("archived_at", null)
+      .is("read_at", null);
+    throwSupabase(error, "Falha ao marcar notificações como lidas");
+    return { ok: true as const };
+  }
+
+  if (input.action === "archive_all") {
+    const { error } = await client
+      .from("notifications")
+      .update({ archived_at: now, read_at: now })
+      .is("archived_at", null);
+    throwSupabase(error, "Falha ao limpar notificações");
+    return { ok: true as const };
+  }
+
+  if (!input.id) throw new Error("ID da notificação é obrigatório.");
+
   const patch =
     input.action === "read"
-      ? { read_at: new Date().toISOString() }
-      : { archived_at: new Date().toISOString() };
-  const { error } = await getSupabaseServerClient({ admin: true })
+      ? { read_at: now }
+      : { archived_at: now, read_at: now };
+  const { error } = await client
     .from("notifications")
     .update(patch)
     .eq("id", input.id);

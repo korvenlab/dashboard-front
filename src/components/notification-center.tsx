@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Bell, Check } from "lucide-react";
+import { Archive, Bell, Check, CheckCheck, Trash2 } from "lucide-react";
 import {
   fetchNotificationsHttp,
   fetchSupabasePublicConfigHttp,
@@ -18,11 +18,24 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function severityLabel(level: string | null): string | null {
+  if (!level) return null;
+  const map: Record<string, string> = {
+    info: "Info",
+    success: "Sucesso",
+    warning: "Atenção",
+    error: "Erro",
+    critical: "Crítico",
+  };
+  return map[level.toLowerCase()] ?? level;
+}
+
 export function NotificationCenter() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -81,6 +94,25 @@ export function NotificationCenter() {
     }
   }
 
+  async function mutateBulk(action: "read_all" | "archive_all") {
+    if (action === "archive_all") {
+      const ok = window.confirm(
+        "Limpar todas as notificações? Elas saem da lista (arquivadas).",
+      );
+      if (!ok) return;
+    }
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await mutateNotificationHttp({ action });
+      await refresh();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const unread = useMemo(
     () => items.filter((item) => !item.read_at).length,
     [items],
@@ -107,8 +139,8 @@ export function NotificationCenter() {
         align="end"
         className="w-[min(420px,calc(100vw-2rem))] rounded-none p-0"
       >
-        <div className="flex items-center justify-between border-b border-border p-3">
-          <div>
+        <div className="flex items-start justify-between gap-2 border-b border-border p-3">
+          <div className="min-w-0">
             <p className="font-mono text-xs font-semibold uppercase tracking-wider">
               Notificações
             </p>
@@ -118,6 +150,32 @@ export function NotificationCenter() {
                 : `${unread} não lidas · atualização contínua`}
             </p>
           </div>
+          {items.length > 0 ? (
+            <div className="flex shrink-0 gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 font-mono text-[10px]"
+                disabled={bulkBusy || unread === 0}
+                title="Marcar tudo como lido"
+                onClick={() => void mutateBulk("read_all")}
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                Ler tudo
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 font-mono text-[10px] text-muted-foreground hover:text-rose-400"
+                disabled={bulkBusy}
+                title="Limpar notificações"
+                onClick={() => void mutateBulk("archive_all")}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Limpar
+              </Button>
+            </div>
+          ) : null}
         </div>
         <div className="max-h-[430px] overflow-y-auto">
           {error ? (
@@ -155,14 +213,16 @@ export function NotificationCenter() {
                       {item.message}
                     </p>
                   ) : null}
-                  {item.level ? (
-                    <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                      {item.level}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {severityLabel(item.level) ? (
+                      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                        {severityLabel(item.level)}
+                      </p>
+                    ) : null}
+                    <p className="font-mono text-[9px] text-muted-foreground">
+                      {new Date(item.created_at).toLocaleString("pt-BR")}
                     </p>
-                  ) : null}
-                  <p className="mt-1 font-mono text-[9px] text-muted-foreground">
-                    {new Date(item.created_at).toLocaleString("pt-BR")}
-                  </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   {!item.read_at ? (
@@ -170,7 +230,7 @@ export function NotificationCenter() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      disabled={busyId === item.id}
+                      disabled={busyId === item.id || bulkBusy}
                       title="Marcar como lida"
                       onClick={() => void mutate(item.id, "read")}
                     >
@@ -181,8 +241,8 @@ export function NotificationCenter() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    disabled={busyId === item.id}
-                    title="Arquivar"
+                    disabled={busyId === item.id || bulkBusy}
+                    title="Remover"
                     onClick={() => void mutate(item.id, "archive")}
                   >
                     <Archive className="h-3.5 w-3.5" />

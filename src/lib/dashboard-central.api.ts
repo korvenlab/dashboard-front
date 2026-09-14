@@ -69,10 +69,15 @@ const accessLinkSchema = z.object({
   productSlug: z.string().min(1).max(80),
 });
 
-const notificationMutationSchema = z.object({
-  id: z.string().uuid(),
-  action: z.enum(["read", "archive"]),
-});
+const notificationMutationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.enum(["read", "archive"]),
+    id: z.string().uuid(),
+  }),
+  z.object({
+    action: z.enum(["read_all", "archive_all"]),
+  }),
+]);
 
 const UPTIME_STATUS: Record<number, string> = {
   0: "Paused",
